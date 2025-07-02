@@ -313,6 +313,29 @@ const handleSetupCommand = async (interaction) => {
         return;
     }
 
+    // Test the webhook by sending a POST request
+    try {
+        const testPayload = {
+            event_type: 'test_webhook',
+            message: 'This is a test from your Discord bot setup. If you see this, your webhook is working!'
+        };
+        const response = await axios.post(webhookUrl, testPayload, { timeout: 5000 });
+        if (response.status < 200 || response.status >= 300) {
+            throw new Error(`Received status code ${response.status}`);
+        }
+    } catch (error) {
+        let errorMsg = '❌ Failed to reach the webhook URL. Please check that your n8n webhook is online and publicly accessible.';
+        if (error.response) {
+            errorMsg += `\nStatus: ${error.response.status}`;
+        } else if (error.code === 'ECONNABORTED') {
+            errorMsg += '\nRequest timed out.';
+        } else {
+            errorMsg += `\nError: ${error.message}`;
+        }
+        await interaction.reply({ content: errorMsg, ephemeral: true });
+        return;
+    }
+
     try {
         await db.setChannelWebhook(channelId, webhookUrl, guildId);
         await db.storeGuild(guildId, interaction.guild.name);
