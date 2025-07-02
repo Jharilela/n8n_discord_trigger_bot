@@ -35,7 +35,7 @@ Create a `.env` file with the following variables:
 ```env
 # Discord Configuration
 DISCORD_TOKEN=your_discord_bot_token
-CLIENT_ID=your_discord_application_client_id
+DISCORD_CLIENT_ID=your_discord_application_client_id
 
 # Database Configuration
 DATABASE_URL=postgresql://username:password@host:port/database
@@ -154,7 +154,7 @@ The bot sends structured JSON payloads to your n8n webhooks:
 1. Connect your GitHub repository to Railway
 2. Set the following environment variables in Railway:
    - `DISCORD_TOKEN`
-   - `CLIENT_ID`
+   - `DISCORD_CLIENT_ID`
    - `DATABASE_URL`
    - `NODE_ENV=production`
 
@@ -251,7 +251,7 @@ To add support for new Discord events:
 
 1. **Bot not responding to slash commands**
    - Ensure the bot has the "Use Slash Commands" permission
-   - Check that `CLIENT_ID` is set correctly
+   - Check that `DISCORD_CLIENT_ID` is set correctly
    - Verify the bot is online
 
 2. **Database connection errors**

@@ -72,18 +72,27 @@ const commands = [
 // Register slash commands
 const registerCommands = async () => {
     try {
+        console.log('=== SLASH COMMAND REGISTRATION ===');
+        console.log('DISCORD_CLIENT_ID:', process.env.DISCORD_CLIENT_ID);
+        console.log('DISCORD_TOKEN exists:', !!process.env.DISCORD_TOKEN);
+        
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
         
         console.log('Started refreshing application (/) commands.');
+        console.log('Commands to register:', commands.map(cmd => cmd.name));
         
-        await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
+        const result = await rest.put(
+            Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
             { body: commands }
         );
         
         console.log('Successfully reloaded application (/) commands.');
+        console.log('Registered commands:', result.length);
+        console.log('=== END SLASH COMMAND REGISTRATION ===');
     } catch (error) {
         console.error('Error registering commands:', error);
+        console.error('Error details:', error.message);
+        if (error.code) console.error('Error code:', error.code);
     }
 };
 

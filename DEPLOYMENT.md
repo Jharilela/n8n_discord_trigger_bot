@@ -40,7 +40,7 @@ This guide will help you deploy the n8n Discord Bot to Railway with PostgreSQL d
 
 ```env
 DISCORD_TOKEN=your_discord_bot_token_here
-CLIENT_ID=your_discord_application_client_id_here
+DISCORD_CLIENT_ID=your_discord_application_client_id_here
 DATABASE_URL=postgresql://... (from PostgreSQL service)
 NODE_ENV=production
 
@@ -94,7 +94,7 @@ GITHUB_TOKEN=your_github_personal_access_token
 - Check Railway logs for connection errors
 
 **Slash commands not working**
-- Ensure `CLIENT_ID` is correct
+- Ensure `DISCORD_CLIENT_ID` is correct
 - Check bot has "Use Slash Commands" permission
 - Wait a few minutes for commands to register
 
