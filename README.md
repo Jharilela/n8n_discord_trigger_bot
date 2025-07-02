@@ -1,205 +1,298 @@
-# Discord to n8n Message Forwarder Bot
+# n8n Discord Bot
 
-> A powerful Discord bot that seamlessly integrates with n8n workflows. Automatically forwards Discord messages to n8n webhooks with detailed content type detection, perfect for automation and workflow triggers.
-
-[![Discord](https://img.shields.io/badge/Discord-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
-[![n8n](https://img.shields.io/badge/n8n-00E833?style=for-the-badge&logo=n8n&logoColor=white)](https://n8n.io)
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app)
-
-## 🔍 Overview
-
-This Discord bot is designed to bridge Discord and n8n, enabling powerful automation workflows. It listens for messages in Discord channels and forwards them to n8n webhooks with detailed content analysis, making it perfect for:
-
-- Discord message triggers for n8n workflows
-- Automated content moderation
-- Message archiving and logging
-- Custom Discord integrations
-- Workflow automation based on Discord activity
-
-## 🚀 Key Features
-
-- **Smart Content Detection**: Automatically identifies message types (text, stickers, images, videos, etc.)
-- **Rich Message Data**: Forwards comprehensive message information to n8n
-- **Easy Integration**: Simple setup with environment variables
-- **Secure**: Built-in security features and proper error handling
-- **Reliable**: Graceful shutdown and error recovery
-- **Easy Deployment**: One-click deployment to Railway
-
-## 📋 Table of Contents
-
-- [Setup](#setup)
-- [Features](#features)
-- [Security](#security)
-- [Required Permissions](#required-discord-bot-permissions)
-- [Webhook Format](#n8n-webhook-format)
-- [Content Types](#content-types)
-- [Deployment](#deployment)
-
-## Setup
-
-1. Create a Discord application and bot:
-   - Go to the [Discord Developer Portal](https://discord.com/developers/applications)
-   - Create a new application
-   - Go to the "Bot" section and create a bot
-   - Copy the bot token and client ID
-
-2. Configure the bot:
-   - Copy the `.env` file and rename it to `.env`
-   - Fill in the following values:
-     - `DISCORD_TOKEN`: Your Discord bot token
-     - `DISCORD_CLIENT_ID`: Your Discord client ID
-     - `N8N_WEBHOOK_URL`: Your n8n webhook URL
-
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-4. Start the bot:
-   ```bash
-   node index.js
-   ```
+A powerful Discord bot that routes messages, reactions, and thread events to n8n webhooks on a per-channel basis. This bot allows you to configure different n8n webhook URLs for different Discord channels, enabling flexible automation workflows.
 
 ## Features
 
-- Listens for messages in all channels the bot has access to
-- Forwards messages to n8n webhook with detailed information including:
-  - Message content and type
-  - Author information
-  - Channel information
-  - Guild (server) information
-  - Timestamp
-  - Message ID
-  - Original message object
+- **Per-Channel Webhook Configuration**: Set up different n8n webhook URLs for each Discord channel
+- **Slash Commands**: Easy-to-use Discord slash commands for configuration
+- **Comprehensive Event Tracking**: Captures messages, reactions, thread events, and more
+- **PostgreSQL Database**: Persistent storage for webhook configurations
+- **Automatic Backups**: Hourly database backups to GitHub
+- **Railway Deployment Ready**: Optimized for Railway hosting
 
-## Security
+## Supported Events
 
-- Uses environment variables for sensitive information
-- Implements proper error handling
-- Graceful shutdown on process termination
-- Ignores messages from other bots
+- **Messages**: All text messages in configured channels
+- **Reactions**: Emoji reactions added/removed from messages
+- **Thread Events**: Thread creation, deletion, updates, and member joins/leaves
+- **Rich Data**: Includes user info, channel info, guild info, and timestamps
 
-## Required Discord Bot Permissions
+## Setup Instructions
 
-- Read Messages/View Channels
-- Send Messages
-- Read Message History
+### 1. Prerequisites
 
-## n8n Webhook Format
+- Node.js 16+ 
+- PostgreSQL database (Railway recommended)
+- Discord Bot Token
+- Discord Application Client ID
+- GitHub Personal Access Token (for automatic backups)
 
-The bot sends messages to n8n in the following format:
+### 2. Environment Variables
+
+Create a `.env` file with the following variables:
+
+```env
+# Discord Configuration
+DISCORD_TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_application_client_id
+
+# Database Configuration
+DATABASE_URL=postgresql://username:password@host:port/database
+
+# Optional: Set to 'production' for Railway
+NODE_ENV=production
+```
+
+### 3. Installation
+
+```bash
+# Install dependencies
+npm install
+
+# Start the bot
+npm start
+```
+
+### 4. Discord Bot Setup
+
+1. Create a Discord application at [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a bot for your application
+3. Copy the bot token and client ID
+4. Add the bot to your server with the following permissions:
+   - Send Messages
+   - Use Slash Commands
+   - Read Message History
+   - Manage Channels (for webhook setup)
+
+### 5. GitHub Personal Access Token (Optional)
+
+For automatic database backups to GitHub:
+
+1. Go to [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
+2. Click "Generate new token (classic)"
+3. Give it a name like "Discord Bot Backups"
+4. Select scopes: `repo` (for private repos) or `public_repo` (for public repos)
+5. Copy the generated token
+6. Add it to your environment variables as `GITHUB_TOKEN`
+
+## Usage
+
+### Slash Commands
+
+#### `/setup <webhook_url>`
+Configure an n8n webhook URL for the current channel.
+
+**Permissions**: Manage Channels
+
+**Example**:
+```
+/setup https://n8n.emp0.com/webhook/discord-channel-A
+```
+
+#### `/remove`
+Remove the n8n webhook configuration from the current channel.
+
+**Permissions**: Manage Channels
+
+#### `/status`
+Check the webhook configuration status for the current channel.
+
+**Permissions**: Manage Channels
+
+#### `/list`
+List all configured webhooks in the current server.
+
+**Permissions**: Manage Channels
+
+#### `/stats`
+Show bot statistics (total webhooks, servers, etc.).
+
+**Permissions**: Administrator
+
+### Webhook Payload Format
+
+The bot sends structured JSON payloads to your n8n webhooks:
 
 ```json
 {
+  "event_type": "message_create",
+  "timestamp": 1640995200000,
   "content": {
-    "text": "message content",
-    "type": "content_type"
+    "text": "Hello, world!",
+    "type": "message_create"
   },
   "author": {
-    "id": "user id",
+    "id": "123456789012345678",
     "username": "username",
-    "discriminator": "discriminator"
+    "discriminator": "0000"
   },
   "channel": {
-    "id": "channel id",
-    "name": "channel name",
-    "type": "channel type"
+    "id": "123456789012345678",
+    "name": "general",
+    "type": 0
   },
   "guild": {
-    "id": "guild id",
-    "name": "guild name"
+    "id": "123456789012345678",
+    "name": "My Server"
   },
-  "message_id": "message id",
-  "original_message": "full Discord message object",
-  "timestamp": 1234567890
+  "message_id": "123456789012345678",
+  "timestamp": 1640995200000
 }
 ```
 
-### Content Types
+## Railway Deployment
 
-The bot classifies messages into the following content types:
+### 1. Database Setup
 
-- `text` - Regular text messages
-- `sticker` - Messages containing stickers
-- `image` - Messages with image attachments
-- `video` - Messages with video attachments
-- `audio` - Messages with audio attachments
-- `file` - Messages with other file types
-- `embed` - Messages containing embeds
-- `poll` - Messages containing polls
-- `reply` - Messages that are replies to other messages
-- `bot_mention` - Messages that mention the bot
-- `link` - Messages containing URLs
-- `empty` - Messages with no content (may contain attachments or other elements)
+1. Create a new PostgreSQL service in Railway
+2. Copy the `DATABASE_URL` from Railway
+3. Add it to your environment variables
 
-## 🚂 Deployment
+### 2. Bot Deployment
 
-### Railway Deployment
+1. Connect your GitHub repository to Railway
+2. Set the following environment variables in Railway:
+   - `DISCORD_TOKEN`
+   - `CLIENT_ID`
+   - `DATABASE_URL`
+   - `NODE_ENV=production`
 
-This bot can be easily deployed to Railway with just a few clicks:
+### 3. Automatic Backups
 
-1. **Get Started with Railway**
-   - Sign up for Railway using my referral code `jay` or [referral link](https://railway.com?referralCode=jay) to get $5 in free credits
-   - This helps support the project and gives you free hosting credits
+The bot automatically creates hourly database backups and pushes them to GitHub. Backups are stored in the `backups/` directory and kept for 24 hours.
 
-2. **Prepare your repository**
-   - Fork this repository
-   - Make sure your `.env` file is properly configured
+**GitHub Backup Configuration (Optional):**
+```env
+GITHUB_USERNAME=your_github_username
+GITHUB_REPO=your_username/n8n_discord_bot
+GITHUB_TOKEN=your_github_personal_access_token
+```
 
-3. **Deploy to Railway**
-   - Go to [Railway](https://railway.com?referralCode=jay)
-   - Click "New Project"
-   - Select "Deploy from GitHub repo"
-   - Choose your forked repository
-   - Railway will automatically detect it's a Node.js project
+**Note:** If GitHub credentials are not provided, backups will still be created locally but won't be pushed to GitHub.
 
-4. **Configure Environment Variables**
-   - In your Railway project dashboard, go to "Variables"
-   - Add the following environment variables:
-     ```
-     DISCORD_TOKEN=your_discord_bot_token
-     DISCORD_CLIENT_ID=your_discord_client_id
-     N8N_WEBHOOK_URL=your_n8n_webhook_url
-     ```
+## Database Schema
 
-5. **Start the Deployment**
-   - Railway will automatically build and deploy your bot
-   - You can monitor the deployment in the "Deployments" tab
-   - Check the logs to ensure everything is running correctly
+### channel_webhooks
+Stores the mapping between Discord channels and n8n webhook URLs.
 
-6. **Verify the Deployment**
-   - Once deployed, your bot should automatically connect to Discord
-   - Test by sending a message in your Discord server
-   - Check the Railway logs to confirm the bot is receiving and forwarding messages
+```sql
+CREATE TABLE channel_webhooks (
+    id SERIAL PRIMARY KEY,
+    channel_id VARCHAR(20) UNIQUE NOT NULL,
+    webhook_url TEXT NOT NULL,
+    guild_id VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-### Railway Credits and Referral Program
+### guilds
+Stores Discord server information.
 
-- Get $5 in free credits when you sign up using our [referral link](https://railway.com?referralCode=jay)
-- Referral code: `3cq6l2`
-- Credits are applied once you pay your first bill or purchase credits
-- This helps support the project and gives you free hosting for your bot
+```sql
+CREATE TABLE guilds (
+    id VARCHAR(20) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-### Railway Configuration Tips
+## Event Types
 
-- **Scaling**: Railway automatically scales your bot based on demand
-- **Monitoring**: Use Railway's built-in monitoring to track your bot's performance
-- **Logs**: Access real-time logs in the Railway dashboard
-- **Updates**: Railway automatically redeploys when you push changes to your repository
+The bot sends different event types to help you identify the source:
 
-### Alternative Deployment Methods
+- `message_create` - New message in a channel
+- `thread_message` - New message in a thread
+- `reaction_add` - Emoji reaction added
+- `thread_reaction_add` - Emoji reaction added in thread
+- `reaction_remove` - Emoji reaction removed
+- `thread_reaction_remove` - Emoji reaction removed in thread
+- `thread_create` - New thread created
+- `thread_delete` - Thread deleted
+- `thread_update` - Thread properties updated
+- `thread_member_join` - User joined thread
+- `thread_member_leave` - User left thread
 
-If you prefer not to use Railway, you can also deploy this bot to:
-- Heroku
-- DigitalOcean
-- AWS
-- Any other Node.js hosting platform
+## Development
 
-The deployment process is similar - just make sure to:
-1. Set up the environment variables
-2. Install dependencies
-3. Start the bot with `node index.js`
+### Project Structure
 
-## 🔑 Keywords
+```
+n8n_discord_bot/
+├── index.js          # Main bot file
+├── database.js       # Database operations
+├── backup.js         # Database backup utilities
+├── package.json      # Dependencies and scripts
+├── README.md         # This file
+└── backups/          # Database backup files (auto-generated)
+```
 
-discord bot, n8n integration, discord automation, n8n webhook, discord triggers, workflow automation, discord message forwarder, n8n discord integration, discord bot development, n8n automation, discord webhook, n8n workflow triggers, discord message types, content detection, discord bot integration, n8n connector, discord automation bot, n8n discord bot, discord message forwarding, n8n webhook integration, railway deployment, deploy discord bot, railway hosting, node.js deployment 
+### Available Scripts
+
+```bash
+npm start          # Start the bot
+npm run backup     # Run manual database backup
+```
+
+### Adding New Event Types
+
+To add support for new Discord events:
+
+1. Add the event listener in `index.js`
+2. Create appropriate data formatting in `createEventData()`
+3. Add webhook URL lookup for the channel
+4. Send to n8n using `sendToN8n()`
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Bot not responding to slash commands**
+   - Ensure the bot has the "Use Slash Commands" permission
+   - Check that `CLIENT_ID` is set correctly
+   - Verify the bot is online
+
+2. **Database connection errors**
+   - Check `DATABASE_URL` format
+   - Ensure PostgreSQL is running
+   - Verify SSL settings for production
+
+3. **Webhook not receiving data**
+   - Check webhook URL format (must start with https://)
+   - Verify n8n webhook is active
+   - Check bot logs for error messages
+
+### Logs
+
+The bot provides detailed logging for:
+- Command execution
+- Database operations
+- Webhook deliveries
+- Error conditions
+
+Check Railway logs for debugging information.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+ISC License - see package.json for details.
+
+## Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the logs
+3. Open an issue on GitHub
+
+---
+
+**Note**: This bot requires appropriate Discord permissions and a valid n8n webhook URL to function properly. 

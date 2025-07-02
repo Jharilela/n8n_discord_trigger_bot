@@ -1,18 +1,22 @@
 {
   "name": "n8n_discord_bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Discord bot for routing messages to n8n webhooks per channel",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "backup": "node backup.js"
   },
-  "keywords": [],
+  "keywords": ["discord", "bot", "n8n", "webhook"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.8.4",
     "discord.js": "^14.18.0",
-    "dotenv": "^16.5.0"
+    "dotenv": "^16.5.0",
+    "pg": "^8.11.3",
+    "node-cron": "^3.0.3"
   }
 }
