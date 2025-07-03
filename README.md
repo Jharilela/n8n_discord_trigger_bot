@@ -4,7 +4,7 @@
 
 - [Terms of Service](./TERMS_OF_SERVICE.md)
 - [Privacy Policy](./PRIVACY_POLICY.md)
-- [Register for n8n](https://n8n.io)
+- [Register for n8n](https://n8n.partnerlinks.io/emp0)
 - [Bot Official Website](https://n8n-discord-trigger-bot.emp0.com)
 - [Developed and mainted by: Emp0 Team](https://emp0.com)
 
@@ -16,9 +16,9 @@ A public, read-only Discord bot that lets you forward messages, reactions, and t
 
 ## 1. Add the Bot to Your Server
 
-**Invite Link:**
+**[Invite Link](https://discord.com/oauth2/authorize?client_id=1389933424331980993):**
 ```
-https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=66560&scope=bot%20applications.commands
+https://discord.com/oauth2/authorize?client_id=1389933424331980993
 ```
 - The bot only requests minimal, read-only permissions:
   - Read Messages/View Channels
