@@ -17,7 +17,7 @@ This guide will help you deploy the n8n Discord Bot to Railway with PostgreSQL d
 ## Railway Deployment Steps
 
 ### Step 1: Create Railway Account
-1. Go to [Railway](https://railway.app)
+1. Go to [Railway](https://railway.com?referralCode=jay)
 2. Sign up with your GitHub account
 3. Get $5 in free credits using referral code: `jay`
 
@@ -178,4 +178,8 @@ If you encounter issues:
 
 ---
 
-**Need help?** Join our Discord server or open an issue on GitHub! 
+**Need help?** Join our Discord server or open an issue on GitHub!
+
+---
+
+**Disclaimer:** This project is not affiliated with, endorsed by, or sponsored by Discord or n8n. We are independent developers who created this tool to solve our own integration needs. 

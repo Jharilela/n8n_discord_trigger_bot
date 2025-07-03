@@ -130,4 +130,8 @@ The bot includes a health check endpoint:
 https://your-app.railway.app
 ```
 
-This will show bot status including backup information. 
+This will show bot status including backup information.
+
+---
+
+**Disclaimer:** This project is not affiliated with, endorsed by, or sponsored by Discord or n8n. We are independent developers who created this tool to solve our own integration needs. 
