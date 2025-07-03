@@ -30,8 +30,17 @@ https://discord.com/oauth2/authorize?client_id=1389933424331980993
 
 ## 2. Set Up a Channel to Forward Messages
 
+![Step 1: Add Bot to Server](https://n8n-discord-trigger-bot.emp0.com/image/step-1-add-bot-to-server.png)
+
 1. Go to the channel you want to forward messages from.
-2. Type the following slash command:
+
+![Step 2: Setup Webhook](https://n8n-discord-trigger-bot.emp0.com/image/step-2-setup-webhook.png)
+
+2. Create a ```POST``` webhook on n8n to receive the requests
+
+![Step 3: Connect Discord Bot to Webhook](https://n8n-discord-trigger-bot.emp0.com/image/step-3-connect-discord-bot-to-webhook.png)
+
+3. Type the following slash command:
    ```
    /setup <webhook_url>
    ```
@@ -39,7 +48,10 @@ https://discord.com/oauth2/authorize?client_id=1389933424331980993
      ```
      /setup https://your-n8n-server.com/webhook/discord-channel-A
      ```
-3. The bot will test your webhook and confirm setup if successful.
+The bot will test your webhook and confirm setup if successful.
+
+![Step 4: Start Automating](https://n8n-discord-trigger-bot.emp0.com/image/step-4-start-automating.png)
+
 4. All new messages, reactions, and thread events in this channel will now be forwarded to your webhook.
 
 - To remove a webhook from a channel:
@@ -55,9 +67,23 @@ https://discord.com/oauth2/authorize?client_id=1389933424331980993
   /list
   ```
 
+### **Bot Commands Interface**
+
+![Setup Command](https://n8n-discord-trigger-bot.emp0.com/image/command-setup.png)
+
+![Remove Command](https://n8n-discord-trigger-bot.emp0.com/image/command-remove.png)
+
+![Status Command](https://n8n-discord-trigger-bot.emp0.com/image/command-status.png)
+
+![List Command](https://n8n-discord-trigger-bot.emp0.com/image/command-list.png)
+
 ---
 
 ## 3. How to Handle Webhook Data in n8n, Zapier, Make.com, or Custom Server
+
+### **Supported Platforms**
+
+![n8n](https://n8n-discord-trigger-bot.emp0.com/logos/n8n.png) ![Zapier](https://n8n-discord-trigger-bot.emp0.com/logos/zapier.png) ![Make.com](https://n8n-discord-trigger-bot.emp0.com/logos/make.png) ![Node.js](https://n8n-discord-trigger-bot.emp0.com/logos/node%20js.png)
 
 ### **n8n**
 - Create a new **Webhook** node in n8n.
