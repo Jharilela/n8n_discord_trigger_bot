@@ -120,4 +120,12 @@ For self-hosting, deployment, and advanced configuration, see the `/deployment/`
 
 ---
 
+## Contact Us
+
+If you have questions, need support, or want to get in touch with the developers:
+- **Email:** [tools@emp0.com](mailto:tools@emp0.com)
+- **Discord:** @jym.god
+
+---
+
 **Disclaimer:** This project is not affiliated with, endorsed by, or sponsored by Discord or n8n. We are independent developers who created this tool to solve our own integration needs. 
