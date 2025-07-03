@@ -6,6 +6,14 @@ A public, read-only Discord bot that lets you forward messages, reactions, and t
 
 ---
 
+## 📺 Video Tutorial
+
+[![n8n Discord Bot Tutorial](https://img.youtube.com/vi/BrYd71pT5cw/maxresdefault.jpg)](https://youtu.be/BrYd71pT5cw)
+
+*Watch our complete tutorial on how to set up and use the n8n Discord trigger bot*
+
+---
+
 ## Important Links
 
 - [Terms of Service](./TERMS_OF_SERVICE.md)
