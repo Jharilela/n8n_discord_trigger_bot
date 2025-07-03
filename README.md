@@ -1,5 +1,11 @@
 # n8n trigger bot
 
+---
+
+A public, read-only Discord bot that lets you forward messages, reactions, and thread events from your Discord server to your own n8n, Zapier, Make.com, or custom webhook for powerful automations.
+
+---
+
 ## Important Links
 
 - [Terms of Service](./TERMS_OF_SERVICE.md)
@@ -7,12 +13,6 @@
 - [Register for n8n](https://n8n.partnerlinks.io/emp0)
 - [Bot Official Website](https://n8n-discord-trigger-bot.emp0.com)
 - [Developed and mainted by: Emp0 Team](https://emp0.com)
-
----
-
-A public, read-only Discord bot that lets you forward messages, reactions, and thread events from your Discord server to your own n8n, Zapier, Make.com, or custom webhook for powerful automations.
-
----
 
 ## 1. Add the Bot to Your Server
 
@@ -30,15 +30,13 @@ https://discord.com/oauth2/authorize?client_id=1389933424331980993
 
 ## 2. Set Up a Channel to Forward Messages
 
-![Step 1: Add Bot to Server](https://n8n-discord-trigger-bot.emp0.com/image/step-1-add-bot-to-server.png)
-
 1. Go to the channel you want to forward messages from.
 
-![Step 2: Setup Webhook](https://n8n-discord-trigger-bot.emp0.com/image/step-2-setup-webhook.png)
+![Step 1: Add Bot to Server](https://n8n-discord-trigger-bot.emp0.com/image/step-1-add-bot-to-server.png)
 
 2. Create a ```POST``` webhook on n8n to receive the requests
 
-![Step 3: Connect Discord Bot to Webhook](https://n8n-discord-trigger-bot.emp0.com/image/step-3-connect-discord-bot-to-webhook.png)
+![Step 2: Setup Webhook](https://n8n-discord-trigger-bot.emp0.com/image/step-2-setup-webhook.png)
 
 3. Type the following slash command:
    ```
@@ -50,30 +48,40 @@ https://discord.com/oauth2/authorize?client_id=1389933424331980993
      ```
 The bot will test your webhook and confirm setup if successful.
 
+![Step 3: Connect Discord Bot to Webhook](https://n8n-discord-trigger-bot.emp0.com/image/step-3-connect-discord-bot-to-webhook.png)
+
+4. Send a test message, and you should receive the data in your n8n flow
+
 ![Step 4: Start Automating](https://n8n-discord-trigger-bot.emp0.com/image/step-4-start-automating.png)
 
-4. All new messages, reactions, and thread events in this channel will now be forwarded to your webhook.
-
-- To remove a webhook from a channel:
-  ```
-  /remove
-  ```
-- To check the status:
-  ```
-  /status
-  ```
-- To list all webhooks in your server:
-  ```
-  /list
-  ```
 
 ### **Bot Commands Interface**
 
+To connect a discord channel to a webhook:
+  ```
+  /setup https://your-n8n-server.com/webhook/discord-channel-A
+  ```
+
 ![Setup Command](https://n8n-discord-trigger-bot.emp0.com/image/command-setup.png)
+
+To remove a webhook from a channel:
+  ```
+  /remove
+  ```
 
 ![Remove Command](https://n8n-discord-trigger-bot.emp0.com/image/command-remove.png)
 
+To check the status:
+  ```
+  /status
+  ```
+
 ![Status Command](https://n8n-discord-trigger-bot.emp0.com/image/command-status.png)
+
+To list all webhooks in your server:
+  ```
+  /list
+  ```
 
 ![List Command](https://n8n-discord-trigger-bot.emp0.com/image/command-list.png)
 
@@ -82,8 +90,6 @@ The bot will test your webhook and confirm setup if successful.
 ## 3. How to Handle Webhook Data in n8n, Zapier, Make.com, or Custom Server
 
 ### **Supported Platforms**
-
-![n8n](https://n8n-discord-trigger-bot.emp0.com/logos/n8n.png) ![Zapier](https://n8n-discord-trigger-bot.emp0.com/logos/zapier.png) ![Make.com](https://n8n-discord-trigger-bot.emp0.com/logos/make.png) ![Node.js](https://n8n-discord-trigger-bot.emp0.com/logos/node%20js.png)
 
 ### **n8n**
 - Create a new **Webhook** node in n8n.
@@ -150,7 +156,7 @@ For self-hosting, deployment, and advanced configuration, see the `/deployment/`
 
 If you have questions, need support, or want to get in touch with the developers:
 - **Email:** [tools@emp0.com](mailto:tools@emp0.com)
-- **Discord:** @jym.god
+- **Discord:** [@jym.god](https://discord.com/users/jym.god)
 
 ---
 
