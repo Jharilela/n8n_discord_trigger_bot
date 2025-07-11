@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js",
-    "backup": "node backup.js"
+    "start": "node start.js",
+    "backup": "node backup.js",
+    "dev": "node index.js"
   },
   "keywords": ["discord", "bot", "n8n", "webhook"],
   "author": "",

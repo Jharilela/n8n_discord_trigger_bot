@@ -1,4 +1,18 @@
 require('dotenv').config();
+
+// Validate required environment variables
+const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DATABASE_URL'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+    console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+    console.error('Please set these variables in your environment or .env file');
+    process.exit(1);
+}
+
+console.log('✅ All required environment variables are set');
+console.log('Environment:', process.env.NODE_ENV || 'development');
+
 const { 
     Client, 
     GatewayIntentBits, 
@@ -720,12 +734,55 @@ client.on('error', (error) => {
     console.error('Discord client error:', error);
 });
 
-// Handle process termination
-process.on('SIGINT', () => {
-    console.log('Shutting down...');
-    client.destroy();
-    process.exit(0);
+// Handle process termination gracefully
+const gracefulShutdown = async (signal) => {
+    console.log(`Received ${signal}. Starting graceful shutdown...`);
+    
+    try {
+        // Close HTTP server
+        if (server) {
+            server.close(() => {
+                console.log('HTTP server closed');
+            });
+        }
+        
+        // Destroy Discord client
+        if (client) {
+            client.destroy();
+            console.log('Discord client destroyed');
+        }
+        
+        // Close database connections
+        if (pool) {
+            await pool.end();
+            console.log('Database connections closed');
+        }
+        
+        console.log('Graceful shutdown completed');
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during graceful shutdown:', error);
+        process.exit(1);
+    }
+};
+
+// Handle different termination signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('unhandledRejection');
 });
 
 // Login to Discord with your app's token
-client.login(process.env.DISCORD_TOKEN); 
+client.login(process.env.DISCORD_TOKEN).catch(error => {
+    console.error('Failed to login to Discord:', error);
+    process.exit(1);
+}); 
