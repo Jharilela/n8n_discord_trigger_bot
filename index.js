@@ -697,15 +697,15 @@ client.once('ready', async () => {
         
         // Set up hourly backup cron job
         cron.schedule('0 * * * *', async () => {
-            console.log('Running scheduled backup...');
+            console.log('Running scheduled CSV backup...');
             try {
-                const { createBackup, pushToGitHub, cleanupOldBackups } = require('./backup');
-                const backupFile = await createBackup();
-                await pushToGitHub(backupFile);
+                const { exportToCSV, pushToGitHub, cleanupOldBackups } = require('./backup');
+                const backupDir = await exportToCSV();
+                await pushToGitHub(backupDir);
                 cleanupOldBackups();
-                console.log('Scheduled backup completed successfully');
+                console.log('Scheduled CSV backup completed successfully');
             } catch (error) {
-                console.error('Scheduled backup failed:', error);
+                console.error('Scheduled CSV backup failed:', error);
             }
         });
         

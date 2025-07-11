@@ -50,3 +50,6 @@ pids/
 # Build output
 dist/
 build/ 
+
+# Data backup
+data/

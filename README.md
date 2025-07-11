@@ -158,6 +158,65 @@ To list all webhooks in your server:
 
 For self-hosting, deployment, and advanced configuration, see the `/deployment/` folder in this repository.
 
+### **Data Backup System**
+
+The bot uses a CSV-based backup system that automatically exports database data to CSV files and stores them in version control:
+
+- **Automatic backups**: Every hour via scheduled task
+- **CSV format**: Human-readable and easy to process
+- **Version controlled**: All backups are committed to Git
+- **Small size**: Efficient storage and transfer
+- **Easy recovery**: Simple restore process
+
+#### **GitHub Token Setup (Required for Backups)**
+
+To enable automatic backups to GitHub, you need to set up a GitHub Personal Access Token:
+
+1. **Create GitHub Token:**
+   - Go to [GitHub.com](https://github.com) → Settings → Developer settings → Personal access tokens → Tokens (classic)
+   - Click "Generate new token (classic)"
+   - Give it a name like "n8n Discord Bot Backup"
+   - Select the `repo` scope (full control of private repositories)
+   - Copy the generated token
+
+2. **Set Environment Variables:**
+   ```bash
+   GITHUB_USERNAME=your_github_username
+   GITHUB_REPO=your_username/n8n_discord_bot
+   GITHUB_TOKEN=your_github_personal_access_token
+   ```
+
+3. **Test GitHub Authentication:**
+   ```bash
+   node test-github-auth.js
+   ```
+
+#### **Manual Backup Operations:**
+```bash
+# List all backups
+node data-utils.js list
+
+# Create a manual backup
+node data-utils.js backup
+
+# Restore from a specific backup
+node data-utils.js restore backup-2025-01-11T03-00-00-964Z
+
+# Show latest backup details
+node data-utils.js latest
+```
+
+#### **Testing:**
+```bash
+# Test the backup system
+node test-backup.js
+
+# Test GitHub authentication
+node test-github-auth.js
+```
+
+For more details, see the [data/README.md](./data/README.md) file.
+
 ---
 
 ## Contact Us
