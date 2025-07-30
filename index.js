@@ -79,7 +79,11 @@ const commands = [
     new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Show bot statistics')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    
+    new SlashCommandBuilder()
+        .setName('privacy')
+        .setDescription('View the bot privacy policy')
 ];
 
 // Register slash commands
@@ -164,7 +168,9 @@ const getContentType = (message) => {
 };
 
 // Function to send data to n8n webhook
-const sendToN8n = async (data, eventType, webhookUrl) => {
+const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     try {
         const payload = {
             event_type: eventType,
@@ -172,18 +178,58 @@ const sendToN8n = async (data, eventType, webhookUrl) => {
             ...data
         };
 
-        // Log the payload in a readable format
-        console.log('\nSending to n8n:');
-        console.log('Event Type:', eventType);
-        console.log('Webhook URL:', webhookUrl);
-        console.log('Timestamp:', new Date(payload.timestamp).toISOString());
-        console.log('Payload:', JSON.stringify(payload, null, 2));
-        console.log('----------------------------------------');
+        // Production logging shows event type and webhook URL but no payload content
+        if (isProduction) {
+            console.log(`${eventType} → ${webhookUrl}`);
+        } else {
+            console.log(`Sending ${eventType} to webhook for channel ${channelId}`);
+        }
 
-        await axios.post(webhookUrl, payload);
-        console.log(`Successfully forwarded ${eventType} to n8n`);
+        await axios.post(webhookUrl, payload, { timeout: 10000 });
+        
+        // Record success - reset failure count
+        await db.recordWebhookSuccess(channelId);
+        
+        if (!isProduction) {
+            console.log(`✅ Successfully forwarded ${eventType} to n8n`);
+        }
+        
     } catch (error) {
-        console.error(`Error forwarding ${eventType} to n8n:`, error);
+        // Extract meaningful error information
+        let errorMessage = 'Unknown error';
+        let shouldDisable = false;
+        
+        if (error.response) {
+            // HTTP error response (4xx, 5xx)
+            const status = error.response.status;
+            errorMessage = `HTTP ${status}: ${error.response.data?.message || error.response.statusText}`;
+            
+            // These errors indicate the webhook is permanently broken
+            if (status === 404 || status === 410 || status === 403) {
+                shouldDisable = true;
+            }
+        } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNABORTED') {
+            // DNS or timeout errors - might be temporary
+            errorMessage = `Connection error: ${error.code}`;
+        } else {
+            errorMessage = error.message;
+        }
+        
+        // Always log errors but with less detail in production
+        if (isProduction) {
+            console.error(`Webhook error for channel ${channelId}: ${error.response?.status || error.code}`);
+        } else {
+            console.error(`❌ Error forwarding ${eventType} to webhook (channel ${channelId}): ${errorMessage}`);
+        }
+        
+        // Record the failure in database
+        const result = await db.recordWebhookFailure(channelId, errorMessage);
+        
+        if (result.disabled) {
+            console.warn(`🚫 Webhook for channel ${channelId} auto-disabled after repeated failures`);
+        } else if (result.failureCount && !isProduction) {
+            console.warn(`⚠️  Webhook failure count for channel ${channelId}: ${result.failureCount}/5`);
+        }
     }
 };
 
@@ -301,6 +347,9 @@ client.on('interactionCreate', async (interaction) => {
                 break;
             case 'stats':
                 await handleStatsCommand(interaction);
+                break;
+            case 'privacy':
+                await handlePrivacyCommand(interaction);
                 break;
         }
     } catch (error) {
@@ -500,6 +549,58 @@ const handleStatsCommand = async (interaction) => {
     }
 };
 
+const handlePrivacyCommand = async (interaction) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        const privacyPolicyPath = path.join(__dirname, 'PRIVACY_POLICY.md');
+        
+        if (!fs.existsSync(privacyPolicyPath)) {
+            await interaction.reply({ 
+                content: '❌ Privacy policy file not found.', 
+                ephemeral: true 
+            });
+            return;
+        }
+        
+        const privacyContent = fs.readFileSync(privacyPolicyPath, 'utf8');
+        
+        // Discord embeds have a 4096 character limit for descriptions
+        // If content is too long, we'll truncate and provide a link
+        if (privacyContent.length > 4000) {
+            const truncatedContent = privacyContent.substring(0, 4000) + '...';
+            
+            const embed = new EmbedBuilder()
+                .setColor('#0099ff')
+                .setTitle('🔒 Privacy Policy')
+                .setDescription('```\n' + truncatedContent + '\n```')
+                .addFields({
+                    name: 'Full Policy',
+                    value: 'The full privacy policy is available in the bot\'s repository.',
+                    inline: false
+                })
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+        } else {
+            const embed = new EmbedBuilder()
+                .setColor('#0099ff')
+                .setTitle('🔒 Privacy Policy')
+                .setDescription('```\n' + privacyContent + '\n```')
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+    } catch (error) {
+        console.error('Error handling privacy command:', error);
+        await interaction.reply({ 
+            content: '❌ Failed to load privacy policy. Please try again.', 
+            ephemeral: true 
+        });
+    }
+};
+
 // Message handler with per-channel webhook routing
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
@@ -517,7 +618,7 @@ client.on('messageCreate', async (message) => {
         const eventType = isThread ? 'thread_message' : 'message_create';
         const messageData = createEventData(message, eventType, { isThread });
         
-        await sendToN8n(messageData, eventType, webhookUrl);
+        await sendToN8n(messageData, eventType, webhookUrl, message.channelId);
     } catch (error) {
         console.error('Error processing message:', error);
     }
@@ -563,7 +664,7 @@ const handleReaction = async (reaction, user, eventType) => {
             author: user 
         });
         
-        await sendToN8n(reactionData, fullEventType, webhookUrl);
+        await sendToN8n(reactionData, fullEventType, webhookUrl, reaction.message.channelId);
     } catch (error) {
         console.error(`Error processing ${eventType}:`, error);
     }
@@ -579,7 +680,7 @@ client.on('threadCreate', async (thread) => {
         }
 
         const threadData = createEventData(thread, 'thread_create', { isThreadEvent: true });
-        await sendToN8n(threadData, 'thread_create', webhookUrl);
+        await sendToN8n(threadData, 'thread_create', webhookUrl, thread.parentId);
     } catch (error) {
         console.error('Error processing thread creation:', error);
     }
@@ -594,7 +695,7 @@ client.on('threadDelete', async (thread) => {
         }
 
         const threadData = createEventData(thread, 'thread_delete', { isThreadEvent: true });
-        await sendToN8n(threadData, 'thread_delete', webhookUrl);
+        await sendToN8n(threadData, 'thread_delete', webhookUrl, thread.parentId);
     } catch (error) {
         console.error('Error processing thread deletion:', error);
     }
@@ -635,7 +736,7 @@ client.on('threadUpdate', async (oldThread, newThread) => {
             isThreadEvent: true,
             changes 
         });
-        await sendToN8n(threadData, 'thread_update', webhookUrl);
+        await sendToN8n(threadData, 'thread_update', webhookUrl, newThread.parentId);
     } catch (error) {
         console.error('Error processing thread update:', error);
     }
@@ -653,7 +754,7 @@ client.on('threadMemberAdd', async (member) => {
             isThreadEvent: true,
             author: member.user 
         });
-        await sendToN8n(threadData, 'thread_member_join', webhookUrl);
+        await sendToN8n(threadData, 'thread_member_join', webhookUrl, member.thread.parentId);
     } catch (error) {
         console.error('Error processing thread member join:', error);
     }
@@ -671,7 +772,7 @@ client.on('threadMemberRemove', async (member) => {
             isThreadEvent: true,
             author: member.user 
         });
-        await sendToN8n(threadData, 'thread_member_leave', webhookUrl);
+        await sendToN8n(threadData, 'thread_member_leave', webhookUrl, member.thread.parentId);
     } catch (error) {
         console.error('Error processing thread member leave:', error);
     }

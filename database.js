@@ -18,9 +18,22 @@ const initDatabase = async () => {
                 channel_id VARCHAR(20) UNIQUE NOT NULL,
                 webhook_url TEXT NOT NULL,
                 guild_id VARCHAR(20) NOT NULL,
+                failure_count INTEGER DEFAULT 0,
+                last_failure_at TIMESTAMP,
+                is_active BOOLEAN DEFAULT true,
+                disabled_reason TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        `);
+
+        // Add new columns to existing table if they don't exist
+        await client.query(`
+            ALTER TABLE channel_webhooks 
+            ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS last_failure_at TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
+            ADD COLUMN IF NOT EXISTS disabled_reason TEXT
         `);
 
         // Create guilds table for additional server info
@@ -43,11 +56,11 @@ const initDatabase = async () => {
 
 // Database operations
 const db = {
-    // Get webhook URL for a channel
+    // Get webhook URL for a channel (only if active)
     getChannelWebhook: async (channelId) => {
         try {
             const result = await pool.query(
-                'SELECT webhook_url FROM channel_webhooks WHERE channel_id = $1',
+                'SELECT webhook_url FROM channel_webhooks WHERE channel_id = $1 AND is_active = true',
                 [channelId]
             );
             return result.rows[0]?.webhook_url || null;
@@ -136,7 +149,60 @@ const db = {
             console.error('Error getting stats:', error);
             return { webhookCount: 0, guildCount: 0 };
         }
-    }
+    },
+
+    // Record webhook failure
+    recordWebhookFailure: async (channelId, errorMessage) => {
+        try {
+            const MAX_FAILURES = 5; // Disable after 5 consecutive failures
+            
+            const result = await pool.query(`
+                UPDATE channel_webhooks 
+                SET 
+                    failure_count = failure_count + 1,
+                    last_failure_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE channel_id = $1 
+                RETURNING failure_count, guild_id
+            `, [channelId]);
+            
+            if (result.rows[0] && result.rows[0].failure_count >= MAX_FAILURES) {
+                await pool.query(`
+                    UPDATE channel_webhooks 
+                    SET 
+                        is_active = false,
+                        disabled_reason = $2,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE channel_id = $1
+                `, [channelId, `Auto-disabled after ${MAX_FAILURES} consecutive failures: ${errorMessage}`]);
+                
+                console.warn(`🚫 Webhook auto-disabled for channel ${channelId} after ${MAX_FAILURES} failures`);
+                return { disabled: true, guildId: result.rows[0].guild_id };
+            }
+            
+            return { disabled: false, failureCount: result.rows[0].failure_count };
+        } catch (error) {
+            console.error('Error recording webhook failure:', error);
+            return { disabled: false };
+        }
+    },
+
+    // Record webhook success (reset failure count)
+    recordWebhookSuccess: async (channelId) => {
+        try {
+            await pool.query(`
+                UPDATE channel_webhooks 
+                SET 
+                    failure_count = 0,
+                    last_failure_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE channel_id = $1
+            `, [channelId]);
+        } catch (error) {
+            console.error('Error recording webhook success:', error);
+        }
+    },
+
 };
 
 module.exports = { pool, initDatabase, db }; 

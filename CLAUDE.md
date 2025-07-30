@@ -74,6 +74,16 @@ GITHUB_TOKEN=<github_personal_access_token>
 - `/status` - Show webhook status for current channel
 - `/list` - List all webhooks in server
 - `/stats` - Show bot statistics (admin only)
+- `/privacy` - Display the bot's privacy policy
+
+### Webhook Health Management
+
+The bot automatically tracks webhook failures and disables problematic webhooks:
+- **Failure tracking**: Records consecutive webhook failures in database
+- **Auto-disable**: Webhooks disabled after 5 consecutive failures  
+- **Manual recovery**: Admins can re-setup webhooks using `/setup` command
+- **Error types**: 404, 403, 410 errors disable immediately; timeouts/DNS errors are retried
+- **Production logging**: Minimal logging in production to prevent traffic snooping
 
 ### Event Types Supported
 
