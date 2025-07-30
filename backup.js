@@ -137,70 +137,86 @@ const exportToCSV = async () => {
 };
 
 const pushToGitHub = async (backupDir) => {
-    return new Promise((resolve, reject) => {
-        // Check if we're in a Git repository
-        exec('git status', { cwd: __dirname }, (error, stdout, stderr) => {
-            if (error) {
-                console.warn('Not in a Git repository, skipping GitHub push');
-                console.log('Backup files created locally:', backupDir);
-                resolve();
-                return;
+    const githubToken = process.env.GITHUB_TOKEN;
+    const githubRepo = process.env.GITHUB_REPO || 'your-username/n8n_discord_bot';
+    
+    if (!githubToken) {
+        console.warn('GITHUB_TOKEN not found, skipping GitHub push');
+        console.log('Backup files created locally:', backupDir);
+        return;
+    }
+    
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const axios = require('axios');
+        
+        console.log('Pushing backup to GitHub via API...');
+        
+        // Read backup files
+        const backupName = path.basename(backupDir);
+        const webhooksFile = path.join(backupDir, 'channel_webhooks.csv');
+        const guildsFile = path.join(backupDir, 'guilds.csv');
+        const metadataFile = path.join(backupDir, 'metadata.json');
+        
+        const webhooksContent = fs.existsSync(webhooksFile) ? fs.readFileSync(webhooksFile, 'utf8') : '';
+        const guildsContent = fs.existsSync(guildsFile) ? fs.readFileSync(guildsFile, 'utf8') : '';
+        const metadataContent = fs.existsSync(metadataFile) ? fs.readFileSync(metadataFile, 'utf8') : '';
+        
+        // GitHub API headers
+        const headers = {
+            'Authorization': `token ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'n8n-discord-bot'
+        };
+        
+        // Create/update files via GitHub API
+        const files = [
+            { path: `data/${backupName}/channel_webhooks.csv`, content: webhooksContent },
+            { path: `data/${backupName}/guilds.csv`, content: guildsContent },
+            { path: `data/${backupName}/metadata.json`, content: metadataContent }
+        ];
+        
+        for (const file of files) {
+            const encodedContent = Buffer.from(file.content).toString('base64');
+            
+            // Check if file exists
+            let sha = null;
+            try {
+                const getResponse = await axios.get(
+                    `https://api.github.com/repos/${githubRepo}/contents/${file.path}`,
+                    { headers }
+                );
+                sha = getResponse.data.sha;
+            } catch (error) {
+                // File doesn't exist, that's fine
             }
             
-            // Configure Git first
-            configureGit().then(() => {
-                const commands = [
-                    'git add .',
-                    `git commit -m "Database backup: ${path.basename(backupDir)} - ${new Date().toISOString()}"`,
-                    'git push origin main'
-                ];
-                
-                let currentCommand = 0;
-                
-                const runCommand = () => {
-                    if (currentCommand >= commands.length) {
-                        console.log('All Git commands completed successfully');
-                        resolve();
-                        return;
-                    }
-                    
-                    const command = commands[currentCommand];
-                    console.log(`Running Git command: ${command}`);
-                    
-                    exec(command, { cwd: __dirname }, (error, stdout, stderr) => {
-                        if (error) {
-                            console.error(`Error running Git command "${command}":`, error);
-                            
-                            // Handle specific authentication errors
-                            if (command.includes('push') && error.message.includes('Authentication failed')) {
-                                console.error('GitHub authentication failed. Please check your GITHUB_TOKEN environment variable.');
-                                console.error('Make sure the token has the necessary permissions (repo access) and is valid.');
-                            } else if (command.includes('push') && error.message.includes('remote: Invalid username or password')) {
-                                console.error('Invalid GitHub credentials. Please check your GITHUB_TOKEN.');
-                            } else if (command.includes('push') && error.message.includes('remote: Repository not found')) {
-                                console.error('Repository not found. Please check your GITHUB_REPO environment variable.');
-                            }
-                            
-                            // Don't reject on push errors (might be network issues)
-                            if (command.includes('push')) {
-                                console.warn('Push failed, but backup files were created locally');
-                                resolve();
-                            } else {
-                                reject(error);
-                            }
-                            return;
-                        }
-                        
-                        console.log(`Git command completed: ${command}`);
-                        currentCommand++;
-                        runCommand();
-                    });
-                };
-                
-                runCommand();
-            }).catch(reject);
-        });
-    });
+            // Create or update file
+            const payload = {
+                message: `Database backup: ${backupName} - ${new Date().toISOString()}`,
+                content: encodedContent
+            };
+            
+            if (sha) {
+                payload.sha = sha;
+            }
+            
+            await axios.put(
+                `https://api.github.com/repos/${githubRepo}/contents/${file.path}`,
+                payload,
+                { headers }
+            );
+            
+            console.log(`✅ Uploaded ${file.path} to GitHub`);
+        }
+        
+        console.log('✅ All backup files pushed to GitHub successfully');
+        
+    } catch (error) {
+        console.error('Error pushing to GitHub:', error.response?.data || error.message);
+        console.log('Backup files created locally:', backupDir);
+    }
 };
 
 const cleanupOldBackups = () => {
