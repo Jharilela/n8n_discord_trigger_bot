@@ -21,12 +21,21 @@ const {
     REST, 
     Routes,
     EmbedBuilder,
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    InteractionResponseFlags
 } = require('discord.js');
 const axios = require('axios');
 const { initDatabase, db } = require('./database');
 const cron = require('node-cron');
 const http = require('http');
+
+// Utility function for ephemeral replies (fixes Discord.js deprecation warning)
+const replyEphemeral = (interaction, options) => {
+    return interaction.reply({
+        ...options,
+        flags: InteractionResponseFlags.Ephemeral
+    });
+};
 
 // Create a new client instance
 const client = new Client({
@@ -354,9 +363,8 @@ client.on('interactionCreate', async (interaction) => {
         }
     } catch (error) {
         console.error(`Error handling command ${commandName}:`, error);
-        await interaction.reply({ 
-            content: 'An error occurred while processing your command.', 
-            ephemeral: true 
+        await replyEphemeral(interaction, { 
+            content: 'An error occurred while processing your command.' 
         });
     }
 });
@@ -368,9 +376,8 @@ const handleSetupCommand = async (interaction) => {
 
     // Validate webhook URL
     if (!webhookUrl.startsWith('https://')) {
-        await interaction.reply({ 
-            content: '❌ Invalid webhook URL. Please provide a valid HTTPS URL.', 
-            ephemeral: true 
+        await replyEphemeral(interaction, { 
+            content: '❌ Invalid webhook URL. Please provide a valid HTTPS URL.' 
         });
         return;
     }
