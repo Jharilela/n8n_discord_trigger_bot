@@ -40,7 +40,7 @@ const configureGit = async () => {
             const command = commands[currentCommand];
             console.log(`Configuring Git: ${command.replace(githubToken || '', '[TOKEN_HIDDEN]')}`);
             
-            exec(command, (error, stdout, stderr) => {
+            exec(command, { cwd: __dirname }, (error, stdout, stderr) => {
                 if (error && !command.includes('grep')) {
                     console.warn(`Warning during Git config: ${error.message}`);
                 }
@@ -139,7 +139,7 @@ const exportToCSV = async () => {
 const pushToGitHub = async (backupDir) => {
     return new Promise((resolve, reject) => {
         // Check if we're in a Git repository
-        exec('git status', (error, stdout, stderr) => {
+        exec('git status', { cwd: __dirname }, (error, stdout, stderr) => {
             if (error) {
                 console.warn('Not in a Git repository, skipping GitHub push');
                 console.log('Backup files created locally:', backupDir);
@@ -167,7 +167,7 @@ const pushToGitHub = async (backupDir) => {
                     const command = commands[currentCommand];
                     console.log(`Running Git command: ${command}`);
                     
-                    exec(command, (error, stdout, stderr) => {
+                    exec(command, { cwd: __dirname }, (error, stdout, stderr) => {
                         if (error) {
                             console.error(`Error running Git command "${command}":`, error);
                             
