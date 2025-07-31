@@ -6,6 +6,15 @@ A public, read-only Discord bot that lets you forward messages, reactions, and t
 
 ---
 
+## Officially Verified by Discord
+
+GREAT NEWS : the n8n trigger bot on discord has officially been verified by discord and you can find it on the discord discovery marketplace for FREE. Just go to Discord > Discover > Apps > Search for n8n 
+
+![n8n trigger bot on discord discovery apps](https://n8n-discord-trigger-bot.emp0.com/image/n8n-trigger-bot-on-discord-discovery-apps.png)
+
+
+---
+
 ## 📺 Video Tutorial
 
 [![n8n Discord Bot Tutorial](https://img.youtube.com/vi/BrYd71pT5cw/maxresdefault.jpg)](https://youtu.be/BrYd71pT5cw)
@@ -24,15 +33,17 @@ A public, read-only Discord bot that lets you forward messages, reactions, and t
 
 ## 1. Add the Bot to Your Server
 
-**[Invite Link](https://discord.com/oauth2/authorize?client_id=1389933424331980993):**
+**[Invite Link](https://discord.com/discovery/applications/1389933424331980993):**
 ```
-https://discord.com/oauth2/authorize?client_id=1389933424331980993
+https://discord.com/discovery/applications/1389933424331980993
 ```
 - The bot only requests minimal, read-only permissions:
   - Read Messages/View Channels
   - Read Message History
   - Use Slash Commands
 - The bot cannot send messages, moderate, or manage your server.
+
+Incase the above link doesn't work, try the [Alternate Invite Link](https://discord.com/oauth2/authorize?client_id=1389933424331980993)
 
 ---
 
@@ -154,7 +165,7 @@ To list all webhooks in your server:
 
 ---
 
-## 5. Advanced/Deployment/Developer Info
+## 5. Deploy it yourself
 
 For self-hosting, deployment, and advanced configuration, see the `/deployment/` folder in this repository.
 
