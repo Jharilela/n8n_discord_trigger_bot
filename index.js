@@ -33,7 +33,7 @@ const http = require('http');
 const replyEphemeral = (interaction, options) => {
     return interaction.reply({
         ...options,
-        flags: InteractionResponseFlags.Ephemeral
+        ephemeral: true
     });
 };
 
