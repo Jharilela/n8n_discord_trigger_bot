@@ -91,12 +91,7 @@ const commands = [
     
     new SlashCommandBuilder()
         .setName('privacy')
-        .setDescription('View the bot privacy policy'),
-    
-    new SlashCommandBuilder()
-        .setName('admins')
-        .setDescription('Show tracked server administrators')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .setDescription('View the bot privacy policy')
 ];
 
 // Register slash commands
@@ -378,9 +373,6 @@ client.on('interactionCreate', async (interaction) => {
             case 'privacy':
                 await handlePrivacyCommand(interaction);
                 break;
-            case 'admins':
-                await handleAdminsCommand(interaction);
-                break;
         }
     } catch (error) {
         console.error(`Error handling command ${commandName}:`, error);
@@ -506,12 +498,12 @@ const handleStatusCommand = async (interaction) => {
         const webhookDetails = await db.getWebhookDetails(channelId);
         
         // Backwards compatibility: Update user info if missing
-        if (webhookDetails && !webhookDetails.registered_by_user_id) {
+        if (webhookDetails && !webhookDetails.registered_by_admin_id) {
             console.log(`📊 [STATUS_COMMAND] Updating missing user info for existing webhook`);
             await db.updateWebhookUserInfo(channelId, userId, username);
             await db.updateGuildUserInfo(guildId, userId, username);
         } else if (webhookDetails) {
-            console.log(`📊 [STATUS_COMMAND] Webhook found with user: ${webhookDetails.registered_by_username}`);
+            console.log(`📊 [STATUS_COMMAND] Webhook found with admin ID: ${webhookDetails.registered_by_admin_id}`);
         } else {
             console.log(`📊 [STATUS_COMMAND] No webhook configured for channel ${channelId}`);
         }
@@ -605,16 +597,13 @@ const handleStatsCommand = async (interaction) => {
         }
         
         const stats = await db.getStats();
-        const { pool } = require('./database');
-        const adminCount = await pool.query('SELECT COUNT(*) FROM server_admins');
         
         const embed = new EmbedBuilder()
             .setColor('#0099ff')
             .setTitle('📊 Bot Statistics')
             .addFields(
                 { name: 'Total Webhooks', value: stats.webhookCount.toString(), inline: true },
-                { name: 'Total Servers', value: stats.guildCount.toString(), inline: true },
-                { name: 'Tracked Admins', value: adminCount.rows[0].count.toString(), inline: true }
+                { name: 'Total Servers', value: stats.guildCount.toString(), inline: true }
             )
             .setTimestamp();
 
@@ -864,58 +853,6 @@ client.on('threadMemberRemove', async (member) => {
 client.on('messageReactionAdd', (reaction, user) => handleReaction(reaction, user, 'reaction_add'));
 client.on('messageReactionRemove', (reaction, user) => handleReaction(reaction, user, 'reaction_remove'));
 
-const handleAdminsCommand = async (interaction) => {
-    try {
-        // Backwards compatibility: Update guild user info if missing
-        const guildId = interaction.guildId;
-        const userId = interaction.user.id;
-        const username = interaction.user.tag;
-        
-        console.log(`👥 [ADMINS_COMMAND] User ${username} (${userId}) viewing admin list`);
-        
-        if (guildId) {
-            await db.updateGuildUserInfo(guildId, userId, username);
-        }
-        
-        const admins = await db.getAllAdmins();
-        
-        if (admins.length === 0) {
-            await replyEphemeral(interaction, { 
-                content: '❌ No administrators tracked yet.' 
-            });
-            return;
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor('#0099ff')
-            .setTitle('👥 Tracked Server Administrators')
-            .setDescription(`Found ${admins.length} administrator(s)`)
-            .setTimestamp();
-
-        // Show up to 10 most recent admins
-        const recentAdmins = admins.slice(0, 10);
-        
-        recentAdmins.forEach((admin, index) => {
-            const lastSeen = new Date(admin.last_seen).toLocaleDateString();
-            embed.addFields({
-                name: `${index + 1}. ${admin.username}`,
-                value: `ID: ${admin.user_id}\nInteractions: ${admin.interaction_count}\nLast seen: ${lastSeen}`,
-                inline: true
-            });
-        });
-
-        if (admins.length > 10) {
-            embed.setFooter({ text: `Showing 10 of ${admins.length} administrators` });
-        }
-
-        await replyEphemeral(interaction, { embeds: [embed] });
-    } catch (error) {
-        console.error('Error getting admins:', error);
-        await replyEphemeral(interaction, { 
-            content: '❌ Failed to get administrator list. Please try again.' 
-        });
-    }
-};
 
 // Create HTTP server for health checks
 const server = http.createServer((req, res) => {

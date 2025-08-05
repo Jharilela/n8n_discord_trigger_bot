@@ -62,14 +62,7 @@ const initDatabase = async () => {
             )
         `);
 
-        // Add new columns to existing guilds table if they don't exist
-        await client.query(`
-            ALTER TABLE guilds 
-            ADD COLUMN IF NOT EXISTS added_by_user_id VARCHAR(20),
-            ADD COLUMN IF NOT EXISTS added_by_username VARCHAR(100)
-        `);
-
-        // Add foreign key reference to server_admins (optional, for data integrity)
+        // Add foreign key reference to server_admins (clean approach)
         await client.query(`
             ALTER TABLE channel_webhooks 
             ADD COLUMN IF NOT EXISTS registered_by_admin_id VARCHAR(20)
@@ -78,6 +71,19 @@ const initDatabase = async () => {
         await client.query(`
             ALTER TABLE guilds 
             ADD COLUMN IF NOT EXISTS added_by_admin_id VARCHAR(20)
+        `);
+
+        // Drop redundant columns if they exist (safe cleanup)
+        await client.query(`
+            ALTER TABLE channel_webhooks 
+            DROP COLUMN IF EXISTS registered_by_user_id,
+            DROP COLUMN IF EXISTS registered_by_username
+        `);
+        
+        await client.query(`
+            ALTER TABLE guilds 
+            DROP COLUMN IF EXISTS added_by_user_id,
+            DROP COLUMN IF EXISTS added_by_username
         `);
 
         client.release();
@@ -134,21 +140,19 @@ const db = {
             }
             
             const result = await pool.query(`
-                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_user_id, registered_by_username, registered_by_admin_id)
-                VALUES ($1, $2, $3, $4, $5, $4)
+                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_admin_id)
+                VALUES ($1, $2, $3, $4)
                 ON CONFLICT (channel_id) 
                 DO UPDATE SET 
                     webhook_url = EXCLUDED.webhook_url,
                     guild_id = EXCLUDED.guild_id,
-                    registered_by_user_id = EXCLUDED.registered_by_user_id,
-                    registered_by_username = EXCLUDED.registered_by_username,
                     registered_by_admin_id = EXCLUDED.registered_by_admin_id,
                     is_active = true,
                     failure_count = 0,
                     disabled_reason = NULL,
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING *
-            `, [channelId, webhookUrl, guildId, userId, username]);
+            `, [channelId, webhookUrl, guildId, userId]);
             
             console.log(`✅ [WEBHOOK_SETUP] Webhook stored successfully for channel ${channelId}`);
             return result.rows[0];
@@ -214,13 +218,14 @@ const db = {
             }
             
             await pool.query(`
-                INSERT INTO guilds (id, name, added_by_user_id, added_by_username, added_by_admin_id)
-                VALUES ($1, $2, $3, $4, $3)
+                INSERT INTO guilds (id, name, added_by_admin_id)
+                VALUES ($1, $2, $3)
                 ON CONFLICT (id) 
                 DO UPDATE SET 
                     name = EXCLUDED.name,
+                    added_by_admin_id = EXCLUDED.added_by_admin_id,  
                     updated_at = CURRENT_TIMESTAMP
-            `, [guildId, guildName, userId, username]);
+            `, [guildId, guildName, userId]);
             
             console.log(`✅ [GUILD_SETUP] Guild stored successfully: ${guildName}`);
         } catch (error) {
@@ -358,13 +363,11 @@ const db = {
             const result = await pool.query(`
                 UPDATE channel_webhooks 
                 SET 
-                    registered_by_user_id = $2,
-                    registered_by_username = $3,
                     registered_by_admin_id = $2,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE channel_id = $1 AND registered_by_user_id IS NULL
+                WHERE channel_id = $1 AND registered_by_admin_id IS NULL
                 RETURNING *
-            `, [channelId, userId, username]);
+            `, [channelId, userId]);
             
             if (result.rows[0]) {
                 console.log(`✅ [BACKWARDS_COMPAT] Updated webhook user info for channel ${channelId}`);
@@ -409,13 +412,11 @@ const db = {
             const result = await pool.query(`
                 UPDATE guilds 
                 SET 
-                    added_by_user_id = $2,
-                    added_by_username = $3,
                     added_by_admin_id = $2,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1 AND added_by_user_id IS NULL
+                WHERE id = $1 AND added_by_admin_id IS NULL
                 RETURNING *
-            `, [guildId, userId, username]);
+            `, [guildId, userId]);
             
             if (result.rows[0]) {
                 console.log(`✅ [BACKWARDS_COMPAT] Updated guild user info for guild ${guildId}`);
@@ -444,61 +445,6 @@ const db = {
         }
     },
 
-    // Track server admin (upsert operation)
-    trackServerAdmin: async (userId, username, displayName = null) => {
-        try {
-            console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
-            
-            const result = await pool.query(`
-                INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
-                VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
-                ON CONFLICT (user_id) 
-                DO UPDATE SET 
-                    username = EXCLUDED.username,
-                    display_name = EXCLUDED.display_name,
-                    last_seen = CURRENT_TIMESTAMP,
-                    interaction_count = server_admins.interaction_count + 1
-                RETURNING *
-            `, [userId, username, displayName]);
-            
-            const admin = result.rows[0];
-            const isNew = admin.interaction_count === 1;
-            
-            console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${admin.interaction_count})`);
-            
-            return { admin, isNew };
-        } catch (error) {
-            console.error('❌ [USER_TRACKING] Error tracking server admin:', error);
-            return { admin: null, isNew: false };
-        }
-    },
-
-    // Get admin details
-    getServerAdmin: async (userId) => {
-        try {
-            const result = await pool.query(
-                'SELECT * FROM server_admins WHERE user_id = $1',
-                [userId]
-            );
-            return result.rows[0] || null;
-        } catch (error) {
-            console.error('Error getting server admin:', error);
-            return null;
-        }
-    },
-
-    // Get all tracked admins
-    getAllAdmins: async () => {
-        try {
-            const result = await pool.query(
-                'SELECT * FROM server_admins ORDER BY last_seen DESC'
-            );
-            return result.rows;
-        } catch (error) {
-            console.error('Error getting all admins:', error);
-            return [];
-        }
-    },
 
 };
 
