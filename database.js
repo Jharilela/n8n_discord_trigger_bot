@@ -113,15 +113,8 @@ const db = {
     // Set webhook URL for a channel
     setChannelWebhook: async (channelId, webhookUrl, guildId, userId = null, username = null) => {
         try {
-            console.log(`🔗 [WEBHOOK_SETUP] Setting webhook for channel ${channelId}`);
-            console.log(`🔗 [WEBHOOK_SETUP] User: ${username} (${userId})`);
-            console.log(`🔗 [WEBHOOK_SETUP] Guild: ${guildId}`);
-            console.log(`🔗 [WEBHOOK_SETUP] Webhook URL: ${webhookUrl}`);
-            
             // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
-                
                 const adminUpsert = await pool.query(`
                     INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
                     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
@@ -136,7 +129,9 @@ const db = {
                 
                 const adminResult = adminUpsert.rows[0];
                 const isNew = adminResult.interaction_count === 1;
-                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
+                if (isNew) {
+                    console.log(`👤 New admin added: ${username} (${userId})`);
+                }
             }
             
             const result = await pool.query(`
@@ -154,10 +149,10 @@ const db = {
                 RETURNING *
             `, [channelId, webhookUrl, guildId, userId]);
             
-            console.log(`✅ [WEBHOOK_SETUP] Webhook stored successfully for channel ${channelId}`);
+            console.log(`🔗 New channel webhook setup: ${webhookUrl}`);
             return result.rows[0];
         } catch (error) {
-            console.error('❌ [WEBHOOK_SETUP] Error setting channel webhook:', error);
+            console.error('❌ Error setting channel webhook:', error);
             throw error;
         }
     },
@@ -193,13 +188,8 @@ const db = {
     // Store guild information
     storeGuild: async (guildId, guildName, userId = null, username = null) => {
         try {
-            console.log(`🏰 [GUILD_SETUP] Storing guild: ${guildName} (${guildId})`);
-            console.log(`🏰 [GUILD_SETUP] Added by: ${username} (${userId})`);
-            
             // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
-                
                 const adminUpsert = await pool.query(`
                     INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
                     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
@@ -214,7 +204,9 @@ const db = {
                 
                 const adminResult = adminUpsert.rows[0];
                 const isNew = adminResult.interaction_count === 1;
-                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
+                if (isNew) {
+                    console.log(`👤 New admin added: ${username} (${userId})`);
+                }
             }
             
             await pool.query(`
@@ -227,9 +219,9 @@ const db = {
                     updated_at = CURRENT_TIMESTAMP
             `, [guildId, guildName, userId]);
             
-            console.log(`✅ [GUILD_SETUP] Guild stored successfully: ${guildName}`);
+            console.log(`🏰 New server added: ${guildName}`);
         } catch (error) {
-            console.error('❌ [GUILD_SETUP] Error storing guild:', error);
+            console.error('❌ Error storing guild:', error);
         }
     },
 
@@ -336,13 +328,8 @@ const db = {
     // Check if user info exists for a webhook, update if missing (backwards compatibility)
     updateWebhookUserInfo: async (channelId, userId, username) => {
         try {
-            console.log(`🔄 [BACKWARDS_COMPAT] Checking webhook user info for channel ${channelId}`);
-            console.log(`🔄 [BACKWARDS_COMPAT] Updating with user: ${username} (${userId})`);
-            
             // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
-                
                 const adminUpsert = await pool.query(`
                     INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
                     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
@@ -357,7 +344,9 @@ const db = {
                 
                 const adminResult = adminUpsert.rows[0];
                 const isNew = adminResult.interaction_count === 1;
-                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
+                if (isNew) {
+                    console.log(`👤 New admin added: ${username} (${userId})`);
+                }
             }
             
             const result = await pool.query(`
@@ -370,14 +359,12 @@ const db = {
             `, [channelId, userId]);
             
             if (result.rows[0]) {
-                console.log(`✅ [BACKWARDS_COMPAT] Updated webhook user info for channel ${channelId}`);
-            } else {
-                console.log(`ℹ️ [BACKWARDS_COMPAT] No update needed for channel ${channelId} (already has user info)`);
+                console.log(`👤 Admin assigned to channel webhook`);
             }
             
             return result.rows[0];
         } catch (error) {
-            console.error('❌ [BACKWARDS_COMPAT] Error updating webhook user info:', error);
+            console.error('❌ Error updating webhook user info:', error);
             return null;
         }
     },
@@ -385,13 +372,8 @@ const db = {
     // Check if guild has user info, update if missing (backwards compatibility)
     updateGuildUserInfo: async (guildId, userId, username) => {
         try {
-            console.log(`🔄 [BACKWARDS_COMPAT] Checking guild user info for guild ${guildId}`);
-            console.log(`🔄 [BACKWARDS_COMPAT] Updating with user: ${username} (${userId})`);
-            
             // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
-                
                 const adminUpsert = await pool.query(`
                     INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
                     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
@@ -406,7 +388,9 @@ const db = {
                 
                 const adminResult = adminUpsert.rows[0];
                 const isNew = adminResult.interaction_count === 1;
-                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
+                if (isNew) {
+                    console.log(`👤 New admin added: ${username} (${userId})`);
+                }
             }
             
             const result = await pool.query(`
@@ -419,14 +403,12 @@ const db = {
             `, [guildId, userId]);
             
             if (result.rows[0]) {
-                console.log(`✅ [BACKWARDS_COMPAT] Updated guild user info for guild ${guildId}`);
-            } else {
-                console.log(`ℹ️ [BACKWARDS_COMPAT] No update needed for guild ${guildId} (already has user info)`);
+                console.log(`👤 Admin assigned to server`);
             }
             
             return result.rows[0];
         } catch (error) {
-            console.error('❌ [BACKWARDS_COMPAT] Error updating guild user info:', error);
+            console.error('❌ Error updating guild user info:', error);
             return null;
         }
     },

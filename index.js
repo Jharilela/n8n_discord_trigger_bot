@@ -427,11 +427,6 @@ const handleSetupCommand = async (interaction) => {
         // Capture user information for security tracking
         const userId = interaction.user.id;
         const username = interaction.user.tag;
-        const displayName = interaction.user.displayName || interaction.user.globalName;
-        
-        console.log(`🎛️ [SETUP_COMMAND] User ${username} (${userId}) setting up webhook`);
-        console.log(`🎛️ [SETUP_COMMAND] Channel: ${channelId}, Guild: ${guildId}`);
-        console.log(`🎛️ [SETUP_COMMAND] Display name: ${displayName}`);
         
         await db.setChannelWebhook(channelId, webhookUrl, guildId, userId, username);
         await db.storeGuild(guildId, interaction.guild.name, userId, username);
@@ -490,22 +485,14 @@ const handleStatusCommand = async (interaction) => {
     const userId = interaction.user.id;
     const username = interaction.user.tag;
 
-    console.log(`📊 [STATUS_COMMAND] User ${username} (${userId}) checking status`);
-    console.log(`📊 [STATUS_COMMAND] Channel: ${channelId}, Guild: ${guildId}`);
-
     try {
         // Get detailed webhook info (including user tracking)
         const webhookDetails = await db.getWebhookDetails(channelId);
         
         // Backwards compatibility: Update user info if missing
         if (webhookDetails && !webhookDetails.registered_by_admin_id) {
-            console.log(`📊 [STATUS_COMMAND] Updating missing user info for existing webhook`);
             await db.updateWebhookUserInfo(channelId, userId, username);
             await db.updateGuildUserInfo(guildId, userId, username);
-        } else if (webhookDetails) {
-            console.log(`📊 [STATUS_COMMAND] Webhook found with admin ID: ${webhookDetails.registered_by_admin_id}`);
-        } else {
-            console.log(`📊 [STATUS_COMMAND] No webhook configured for channel ${channelId}`);
         }
         
         const embed = new EmbedBuilder()
@@ -592,8 +579,11 @@ const handleStatsCommand = async (interaction) => {
     try {
         // Backwards compatibility: Update guild user info if missing
         const guildId = interaction.guildId;
+        const userId = interaction.user.id;
+        const username = interaction.user.tag;
+        
         if (guildId) {
-            await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
+            await db.updateGuildUserInfo(guildId, userId, username);
         }
         
         const stats = await db.getStats();
