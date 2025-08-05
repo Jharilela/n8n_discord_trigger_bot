@@ -50,11 +50,34 @@ const initDatabase = async () => {
             )
         `);
 
+        // Create server_admins table for normalized user tracking
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS server_admins (
+                user_id VARCHAR(20) PRIMARY KEY,
+                username VARCHAR(100) NOT NULL,
+                display_name VARCHAR(100),
+                first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                interaction_count INTEGER DEFAULT 1
+            )
+        `);
+
         // Add new columns to existing guilds table if they don't exist
         await client.query(`
             ALTER TABLE guilds 
             ADD COLUMN IF NOT EXISTS added_by_user_id VARCHAR(20),
             ADD COLUMN IF NOT EXISTS added_by_username VARCHAR(100)
+        `);
+
+        // Add foreign key reference to server_admins (optional, for data integrity)
+        await client.query(`
+            ALTER TABLE channel_webhooks 
+            ADD COLUMN IF NOT EXISTS registered_by_admin_id VARCHAR(20)
+        `);
+        
+        await client.query(`
+            ALTER TABLE guilds 
+            ADD COLUMN IF NOT EXISTS added_by_admin_id VARCHAR(20)
         `);
 
         client.release();
@@ -84,15 +107,26 @@ const db = {
     // Set webhook URL for a channel
     setChannelWebhook: async (channelId, webhookUrl, guildId, userId = null, username = null) => {
         try {
+            console.log(`🔗 [WEBHOOK_SETUP] Setting webhook for channel ${channelId}`);
+            console.log(`🔗 [WEBHOOK_SETUP] User: ${username} (${userId})`);
+            console.log(`🔗 [WEBHOOK_SETUP] Guild: ${guildId}`);
+            console.log(`🔗 [WEBHOOK_SETUP] Webhook URL: ${webhookUrl}`);
+            
+            // Track the admin first
+            if (userId && username) {
+                await db.trackServerAdmin(userId, username);
+            }
+            
             const result = await pool.query(`
-                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_user_id, registered_by_username)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_user_id, registered_by_username, registered_by_admin_id)
+                VALUES ($1, $2, $3, $4, $5, $4)
                 ON CONFLICT (channel_id) 
                 DO UPDATE SET 
                     webhook_url = EXCLUDED.webhook_url,
                     guild_id = EXCLUDED.guild_id,
                     registered_by_user_id = EXCLUDED.registered_by_user_id,
                     registered_by_username = EXCLUDED.registered_by_username,
+                    registered_by_admin_id = EXCLUDED.registered_by_admin_id,
                     is_active = true,
                     failure_count = 0,
                     disabled_reason = NULL,
@@ -100,9 +134,10 @@ const db = {
                 RETURNING *
             `, [channelId, webhookUrl, guildId, userId, username]);
             
+            console.log(`✅ [WEBHOOK_SETUP] Webhook stored successfully for channel ${channelId}`);
             return result.rows[0];
         } catch (error) {
-            console.error('Error setting channel webhook:', error);
+            console.error('❌ [WEBHOOK_SETUP] Error setting channel webhook:', error);
             throw error;
         }
     },
@@ -138,16 +173,26 @@ const db = {
     // Store guild information
     storeGuild: async (guildId, guildName, userId = null, username = null) => {
         try {
+            console.log(`🏰 [GUILD_SETUP] Storing guild: ${guildName} (${guildId})`);
+            console.log(`🏰 [GUILD_SETUP] Added by: ${username} (${userId})`);
+            
+            // Track the admin first
+            if (userId && username) {
+                await db.trackServerAdmin(userId, username);
+            }
+            
             await pool.query(`
-                INSERT INTO guilds (id, name, added_by_user_id, added_by_username)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO guilds (id, name, added_by_user_id, added_by_username, added_by_admin_id)
+                VALUES ($1, $2, $3, $4, $3)
                 ON CONFLICT (id) 
                 DO UPDATE SET 
                     name = EXCLUDED.name,
                     updated_at = CURRENT_TIMESTAMP
             `, [guildId, guildName, userId, username]);
+            
+            console.log(`✅ [GUILD_SETUP] Guild stored successfully: ${guildName}`);
         } catch (error) {
-            console.error('Error storing guild:', error);
+            console.error('❌ [GUILD_SETUP] Error storing guild:', error);
         }
     },
 
@@ -168,7 +213,7 @@ const db = {
     },
 
     // Record webhook failure
-    recordWebhookFailure: async (channelId, errorMessage, immediateDisable = false) => {
+    recordWebhookFailure: async (channelId, errorMessage, immediateDisable = false, countTowardsLimit = true) => {
         try {
             const MAX_FAILURES = 5; // Disable after 5 consecutive failures
             
@@ -185,8 +230,23 @@ const db = {
                     WHERE channel_id = $1
                 `, [channelId, `Auto-disabled due to permanent error: ${errorMessage}`]);
                 
-                console.warn(`🚫 Webhook immediately disabled for channel ${channelId}: ${errorMessage}`);
+                console.warn(`🚫 Webhook immediately disabled due to permanent error: ${errorMessage}`);
                 return { disabled: true, immediate: true };
+            }
+            
+            // Only count certain errors towards the failure limit
+            if (!countTowardsLimit) {
+                // Just update last_failure_at but don't increment counter for temporary errors
+                await pool.query(`
+                    UPDATE channel_webhooks 
+                    SET 
+                        last_failure_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE channel_id = $1
+                `, [channelId]);
+                
+                console.log(`⚠️ Temporary error (not counted): ${errorMessage}`);
+                return { disabled: false, temporary: true };
             }
             
             const result = await pool.query(`
@@ -209,7 +269,7 @@ const db = {
                     WHERE channel_id = $1
                 `, [channelId, `Auto-disabled after ${MAX_FAILURES} consecutive failures: ${errorMessage}`]);
                 
-                console.warn(`🚫 Webhook auto-disabled for channel ${channelId} after ${MAX_FAILURES} failures`);
+                console.warn(`🚫 Webhook auto-disabled after ${MAX_FAILURES} consecutive failures`);
                 return { disabled: true, guildId: result.rows[0].guild_id };
             }
             
@@ -239,19 +299,34 @@ const db = {
     // Check if user info exists for a webhook, update if missing (backwards compatibility)
     updateWebhookUserInfo: async (channelId, userId, username) => {
         try {
+            console.log(`🔄 [BACKWARDS_COMPAT] Checking webhook user info for channel ${channelId}`);
+            console.log(`🔄 [BACKWARDS_COMPAT] Updating with user: ${username} (${userId})`);
+            
+            // Track the admin first
+            if (userId && username) {
+                await db.trackServerAdmin(userId, username);
+            }
+            
             const result = await pool.query(`
                 UPDATE channel_webhooks 
                 SET 
                     registered_by_user_id = $2,
                     registered_by_username = $3,
+                    registered_by_admin_id = $2,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE channel_id = $1 AND registered_by_user_id IS NULL
                 RETURNING *
             `, [channelId, userId, username]);
             
+            if (result.rows[0]) {
+                console.log(`✅ [BACKWARDS_COMPAT] Updated webhook user info for channel ${channelId}`);
+            } else {
+                console.log(`ℹ️ [BACKWARDS_COMPAT] No update needed for channel ${channelId} (already has user info)`);
+            }
+            
             return result.rows[0];
         } catch (error) {
-            console.error('Error updating webhook user info:', error);
+            console.error('❌ [BACKWARDS_COMPAT] Error updating webhook user info:', error);
             return null;
         }
     },
@@ -259,19 +334,34 @@ const db = {
     // Check if guild has user info, update if missing (backwards compatibility)
     updateGuildUserInfo: async (guildId, userId, username) => {
         try {
+            console.log(`🔄 [BACKWARDS_COMPAT] Checking guild user info for guild ${guildId}`);
+            console.log(`🔄 [BACKWARDS_COMPAT] Updating with user: ${username} (${userId})`);
+            
+            // Track the admin first
+            if (userId && username) {
+                await db.trackServerAdmin(userId, username);
+            }
+            
             const result = await pool.query(`
                 UPDATE guilds 
                 SET 
                     added_by_user_id = $2,
                     added_by_username = $3,
+                    added_by_admin_id = $2,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = $1 AND added_by_user_id IS NULL
                 RETURNING *
             `, [guildId, userId, username]);
             
+            if (result.rows[0]) {
+                console.log(`✅ [BACKWARDS_COMPAT] Updated guild user info for guild ${guildId}`);
+            } else {
+                console.log(`ℹ️ [BACKWARDS_COMPAT] No update needed for guild ${guildId} (already has user info)`);
+            }
+            
             return result.rows[0];
         } catch (error) {
-            console.error('Error updating guild user info:', error);
+            console.error('❌ [BACKWARDS_COMPAT] Error updating guild user info:', error);
             return null;
         }
     },
@@ -287,6 +377,62 @@ const db = {
         } catch (error) {
             console.error('Error getting webhook details:', error);
             return null;
+        }
+    },
+
+    // Track server admin (upsert operation)
+    trackServerAdmin: async (userId, username, displayName = null) => {
+        try {
+            console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
+            
+            const result = await pool.query(`
+                INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
+                VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                ON CONFLICT (user_id) 
+                DO UPDATE SET 
+                    username = EXCLUDED.username,
+                    display_name = EXCLUDED.display_name,
+                    last_seen = CURRENT_TIMESTAMP,
+                    interaction_count = server_admins.interaction_count + 1
+                RETURNING *
+            `, [userId, username, displayName]);
+            
+            const admin = result.rows[0];
+            const isNew = admin.interaction_count === 1;
+            
+            console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${admin.interaction_count})`);
+            
+            return { admin, isNew };
+        } catch (error) {
+            console.error('❌ [USER_TRACKING] Error tracking server admin:', error);
+            return { admin: null, isNew: false };
+        }
+    },
+
+    // Get admin details
+    getServerAdmin: async (userId) => {
+        try {
+            const result = await pool.query(
+                'SELECT * FROM server_admins WHERE user_id = $1',
+                [userId]
+            );
+            return result.rows[0] || null;
+        } catch (error) {
+            console.error('Error getting server admin:', error);
+            return null;
+        }
+    },
+
+    // Get all tracked admins
+    getAllAdmins: async () => {
+        try {
+            const result = await pool.query(
+                'SELECT * FROM server_admins ORDER BY last_seen DESC'
+            );
+            return result.rows;
+        } catch (error) {
+            console.error('Error getting all admins:', error);
+            return [];
         }
     },
 

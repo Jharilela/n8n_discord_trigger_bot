@@ -91,7 +91,12 @@ const commands = [
     
     new SlashCommandBuilder()
         .setName('privacy')
-        .setDescription('View the bot privacy policy')
+        .setDescription('View the bot privacy policy'),
+    
+    new SlashCommandBuilder()
+        .setName('admins')
+        .setDescription('Show tracked server administrators')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 ];
 
 // Register slash commands
@@ -190,7 +195,7 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
         if (isProduction) {
             console.log(`${eventType} → ${webhookUrl}`);
         } else {
-            console.log(`Sending ${eventType} to webhook for channel ${channelId}`);
+            console.log(`Sending ${eventType} to webhook ${webhookUrl}`);
         }
 
         await axios.post(webhookUrl, payload, { timeout: 10000 });
@@ -199,7 +204,7 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
         await db.recordWebhookSuccess(channelId);
         
         if (!isProduction) {
-            console.log(`✅ Successfully forwarded ${eventType} to n8n`);
+            console.log(`✅ Successfully forwarded ${eventType} to ${webhookUrl}`);
         }
         
     } catch (error) {
@@ -213,7 +218,7 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
             errorMessage = `HTTP ${status}: ${error.response.data?.message || error.response.statusText}`;
             
             // These errors indicate the webhook is permanently broken
-            if (status === 404 || status === 410 || status === 403) {
+            if (status === 404 || status === 403 || status === 410) {
                 shouldDisable = true;
             }
         } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNABORTED') {
@@ -225,18 +230,32 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
         
         // Always log errors but with less detail in production
         if (isProduction) {
-            console.error(`Webhook error for channel ${channelId}: ${error.response?.status || error.code}`);
+            console.error(`Webhook error for ${webhookUrl}: ${error.response?.status || error.code}`);
         } else {
-            console.error(`❌ Error forwarding ${eventType} to webhook (channel ${channelId}): ${errorMessage}`);
+            console.error(`❌ Error forwarding ${eventType} to webhook ${webhookUrl}: ${errorMessage}`);
         }
         
-        // Record the failure in database
-        const result = await db.recordWebhookFailure(channelId, errorMessage, shouldDisable);
+        // Record the failure in database - but don't count temporary errors toward failure limit
+        const isTemporaryError = (error.response?.status === 408) || 
+                                (error.response?.status >= 500) || 
+                                (error.code === 'ECONNABORTED') || 
+                                (error.code === 'ENOTFOUND');
+        
+        const result = await db.recordWebhookFailure(channelId, errorMessage, shouldDisable, !isTemporaryError);
         
         if (result.disabled) {
-            console.warn(`🚫 Webhook for channel ${channelId} auto-disabled after repeated failures`);
+            if (result.immediate) {
+                console.warn(`🚫 Webhook ${webhookUrl} immediately disabled due to permanent error`);
+            } else {
+                console.warn(`🚫 Webhook ${webhookUrl} auto-disabled after 5 consecutive failures`);
+            }
+        } else if (result.temporary) {
+            // Don't log temporary errors in production to reduce noise
+            if (!isProduction) {
+                console.log(`⚠️  Temporary error for webhook ${webhookUrl} (not counted towards limit)`);
+            }
         } else if (result.failureCount && !isProduction) {
-            console.warn(`⚠️  Webhook failure count for channel ${channelId}: ${result.failureCount}/5`);
+            console.warn(`⚠️  Webhook ${webhookUrl} failure count: ${result.failureCount}/5`);
         }
     }
 };
@@ -359,6 +378,9 @@ client.on('interactionCreate', async (interaction) => {
             case 'privacy':
                 await handlePrivacyCommand(interaction);
                 break;
+            case 'admins':
+                await handleAdminsCommand(interaction);
+                break;
         }
     } catch (error) {
         console.error(`Error handling command ${commandName}:`, error);
@@ -413,6 +435,11 @@ const handleSetupCommand = async (interaction) => {
         // Capture user information for security tracking
         const userId = interaction.user.id;
         const username = interaction.user.tag;
+        const displayName = interaction.user.displayName || interaction.user.globalName;
+        
+        console.log(`🎛️ [SETUP_COMMAND] User ${username} (${userId}) setting up webhook`);
+        console.log(`🎛️ [SETUP_COMMAND] Channel: ${channelId}, Guild: ${guildId}`);
+        console.log(`🎛️ [SETUP_COMMAND] Display name: ${displayName}`);
         
         await db.setChannelWebhook(channelId, webhookUrl, guildId, userId, username);
         await db.storeGuild(guildId, interaction.guild.name, userId, username);
@@ -468,6 +495,11 @@ const handleRemoveCommand = async (interaction) => {
 const handleStatusCommand = async (interaction) => {
     const channelId = interaction.channelId;
     const guildId = interaction.guildId;
+    const userId = interaction.user.id;
+    const username = interaction.user.tag;
+
+    console.log(`📊 [STATUS_COMMAND] User ${username} (${userId}) checking status`);
+    console.log(`📊 [STATUS_COMMAND] Channel: ${channelId}, Guild: ${guildId}`);
 
     try {
         // Get detailed webhook info (including user tracking)
@@ -475,8 +507,13 @@ const handleStatusCommand = async (interaction) => {
         
         // Backwards compatibility: Update user info if missing
         if (webhookDetails && !webhookDetails.registered_by_user_id) {
-            await db.updateWebhookUserInfo(channelId, interaction.user.id, interaction.user.tag);
-            await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
+            console.log(`📊 [STATUS_COMMAND] Updating missing user info for existing webhook`);
+            await db.updateWebhookUserInfo(channelId, userId, username);
+            await db.updateGuildUserInfo(guildId, userId, username);
+        } else if (webhookDetails) {
+            console.log(`📊 [STATUS_COMMAND] Webhook found with user: ${webhookDetails.registered_by_username}`);
+        } else {
+            console.log(`📊 [STATUS_COMMAND] No webhook configured for channel ${channelId}`);
         }
         
         const embed = new EmbedBuilder()
@@ -571,13 +608,15 @@ const handleStatsCommand = async (interaction) => {
         }
         
         const stats = await db.getStats();
+        const adminCount = await db.pool.query('SELECT COUNT(*) FROM server_admins');
         
         const embed = new EmbedBuilder()
             .setColor('#0099ff')
             .setTitle('📊 Bot Statistics')
             .addFields(
                 { name: 'Total Webhooks', value: stats.webhookCount.toString(), inline: true },
-                { name: 'Total Servers', value: stats.guildCount.toString(), inline: true }
+                { name: 'Total Servers', value: stats.guildCount.toString(), inline: true },
+                { name: 'Tracked Admins', value: adminCount.rows[0].count.toString(), inline: true }
             )
             .setTimestamp();
 
@@ -829,6 +868,59 @@ client.on('threadMemberRemove', async (member) => {
 // Reaction event listeners
 client.on('messageReactionAdd', (reaction, user) => handleReaction(reaction, user, 'reaction_add'));
 client.on('messageReactionRemove', (reaction, user) => handleReaction(reaction, user, 'reaction_remove'));
+
+const handleAdminsCommand = async (interaction) => {
+    try {
+        // Backwards compatibility: Update guild user info if missing
+        const guildId = interaction.guildId;
+        const userId = interaction.user.id;
+        const username = interaction.user.tag;
+        
+        console.log(`👥 [ADMINS_COMMAND] User ${username} (${userId}) viewing admin list`);
+        
+        if (guildId) {
+            await db.updateGuildUserInfo(guildId, userId, username);
+        }
+        
+        const admins = await db.getAllAdmins();
+        
+        if (admins.length === 0) {
+            await replyEphemeral(interaction, { 
+                content: '❌ No administrators tracked yet.' 
+            });
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle('👥 Tracked Server Administrators')
+            .setDescription(`Found ${admins.length} administrator(s)`)
+            .setTimestamp();
+
+        // Show up to 10 most recent admins
+        const recentAdmins = admins.slice(0, 10);
+        
+        recentAdmins.forEach((admin, index) => {
+            const lastSeen = new Date(admin.last_seen).toLocaleDateString();
+            embed.addFields({
+                name: `${index + 1}. ${admin.username}`,
+                value: `ID: ${admin.user_id}\nInteractions: ${admin.interaction_count}\nLast seen: ${lastSeen}`,
+                inline: true
+            });
+        });
+
+        if (admins.length > 10) {
+            embed.setFooter({ text: `Showing 10 of ${admins.length} administrators` });
+        }
+
+        await replyEphemeral(interaction, { embeds: [embed] });
+    } catch (error) {
+        console.error('Error getting admins:', error);
+        await replyEphemeral(interaction, { 
+            content: '❌ Failed to get administrator list. Please try again.' 
+        });
+    }
+};
 
 // Create HTTP server for health checks
 const server = http.createServer((req, res) => {

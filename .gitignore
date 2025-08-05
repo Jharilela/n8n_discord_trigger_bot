@@ -53,3 +53,6 @@ build/
 
 # Data backup
 data/
+
+# Claude
+.claude/
