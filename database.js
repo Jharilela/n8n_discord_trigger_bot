@@ -33,7 +33,9 @@ const initDatabase = async () => {
             ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS last_failure_at TIMESTAMP,
             ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
-            ADD COLUMN IF NOT EXISTS disabled_reason TEXT
+            ADD COLUMN IF NOT EXISTS disabled_reason TEXT,
+            ADD COLUMN IF NOT EXISTS registered_by_user_id VARCHAR(20),
+            ADD COLUMN IF NOT EXISTS registered_by_username VARCHAR(100)
         `);
 
         // Create guilds table for additional server info
@@ -41,9 +43,18 @@ const initDatabase = async () => {
             CREATE TABLE IF NOT EXISTS guilds (
                 id VARCHAR(20) PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
+                added_by_user_id VARCHAR(20),
+                added_by_username VARCHAR(100),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        `);
+
+        // Add new columns to existing guilds table if they don't exist
+        await client.query(`
+            ALTER TABLE guilds 
+            ADD COLUMN IF NOT EXISTS added_by_user_id VARCHAR(20),
+            ADD COLUMN IF NOT EXISTS added_by_username VARCHAR(100)
         `);
 
         client.release();
@@ -71,18 +82,23 @@ const db = {
     },
 
     // Set webhook URL for a channel
-    setChannelWebhook: async (channelId, webhookUrl, guildId) => {
+    setChannelWebhook: async (channelId, webhookUrl, guildId, userId = null, username = null) => {
         try {
             const result = await pool.query(`
-                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id)
-                VALUES ($1, $2, $3)
+                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_user_id, registered_by_username)
+                VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (channel_id) 
                 DO UPDATE SET 
                     webhook_url = EXCLUDED.webhook_url,
                     guild_id = EXCLUDED.guild_id,
+                    registered_by_user_id = EXCLUDED.registered_by_user_id,
+                    registered_by_username = EXCLUDED.registered_by_username,
+                    is_active = true,
+                    failure_count = 0,
+                    disabled_reason = NULL,
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING *
-            `, [channelId, webhookUrl, guildId]);
+            `, [channelId, webhookUrl, guildId, userId, username]);
             
             return result.rows[0];
         } catch (error) {
@@ -120,16 +136,16 @@ const db = {
     },
 
     // Store guild information
-    storeGuild: async (guildId, guildName) => {
+    storeGuild: async (guildId, guildName, userId = null, username = null) => {
         try {
             await pool.query(`
-                INSERT INTO guilds (id, name)
-                VALUES ($1, $2)
+                INSERT INTO guilds (id, name, added_by_user_id, added_by_username)
+                VALUES ($1, $2, $3, $4)
                 ON CONFLICT (id) 
                 DO UPDATE SET 
                     name = EXCLUDED.name,
                     updated_at = CURRENT_TIMESTAMP
-            `, [guildId, guildName]);
+            `, [guildId, guildName, userId, username]);
         } catch (error) {
             console.error('Error storing guild:', error);
         }
@@ -200,6 +216,60 @@ const db = {
             `, [channelId]);
         } catch (error) {
             console.error('Error recording webhook success:', error);
+        }
+    },
+
+    // Check if user info exists for a webhook, update if missing (backwards compatibility)
+    updateWebhookUserInfo: async (channelId, userId, username) => {
+        try {
+            const result = await pool.query(`
+                UPDATE channel_webhooks 
+                SET 
+                    registered_by_user_id = $2,
+                    registered_by_username = $3,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE channel_id = $1 AND registered_by_user_id IS NULL
+                RETURNING *
+            `, [channelId, userId, username]);
+            
+            return result.rows[0];
+        } catch (error) {
+            console.error('Error updating webhook user info:', error);
+            return null;
+        }
+    },
+
+    // Check if guild has user info, update if missing (backwards compatibility)
+    updateGuildUserInfo: async (guildId, userId, username) => {
+        try {
+            const result = await pool.query(`
+                UPDATE guilds 
+                SET 
+                    added_by_user_id = $2,
+                    added_by_username = $3,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1 AND added_by_user_id IS NULL
+                RETURNING *
+            `, [guildId, userId, username]);
+            
+            return result.rows[0];
+        } catch (error) {
+            console.error('Error updating guild user info:', error);
+            return null;
+        }
+    },
+
+    // Get webhook info including user details
+    getWebhookDetails: async (channelId) => {
+        try {
+            const result = await pool.query(
+                'SELECT * FROM channel_webhooks WHERE channel_id = $1',
+                [channelId]
+            );
+            return result.rows[0] || null;
+        } catch (error) {
+            console.error('Error getting webhook details:', error);
+            return null;
         }
     },
 

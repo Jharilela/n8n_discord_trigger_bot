@@ -405,8 +405,12 @@ const handleSetupCommand = async (interaction) => {
     }
 
     try {
-        await db.setChannelWebhook(channelId, webhookUrl, guildId);
-        await db.storeGuild(guildId, interaction.guild.name);
+        // Capture user information for security tracking
+        const userId = interaction.user.id;
+        const username = interaction.user.tag;
+        
+        await db.setChannelWebhook(channelId, webhookUrl, guildId, userId, username);
+        await db.storeGuild(guildId, interaction.guild.name, userId, username);
 
         const embed = new EmbedBuilder()
             .setColor('#00ff00')
@@ -459,29 +463,45 @@ const handleRemoveCommand = async (interaction) => {
 
 const handleStatusCommand = async (interaction) => {
     const channelId = interaction.channelId;
+    const guildId = interaction.guildId;
 
     try {
-        const webhookUrl = await db.getChannelWebhook(channelId);
+        // Get detailed webhook info (including user tracking)
+        const webhookDetails = await db.getWebhookDetails(channelId);
+        
+        // Backwards compatibility: Update user info if missing
+        if (webhookDetails && !webhookDetails.registered_by_user_id) {
+            await db.updateWebhookUserInfo(channelId, interaction.user.id, interaction.user.tag);
+            await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
+        }
         
         const embed = new EmbedBuilder()
-            .setColor(webhookUrl ? '#00ff00' : '#ff0000')
+            .setColor(webhookDetails?.is_active ? '#00ff00' : '#ff0000')
             .setTitle('📊 Channel Status')
             .setDescription(`Status for <#${channelId}>`)
             .addFields(
                 { 
                     name: 'Status', 
-                    value: webhookUrl ? '✅ Configured' : '❌ Not configured', 
+                    value: webhookDetails?.is_active ? '✅ Configured' : '❌ Not configured', 
                     inline: true 
                 }
             )
             .setTimestamp();
 
-        if (webhookUrl) {
+        if (webhookDetails) {
             embed.addFields({ 
                 name: 'Webhook URL', 
-                value: webhookUrl, 
+                value: webhookDetails.webhook_url, 
                 inline: false 
             });
+
+            if (webhookDetails.failure_count > 0) {
+                embed.addFields({
+                    name: 'Warning',
+                    value: `⚠️ ${webhookDetails.failure_count}/5 failures recorded`,
+                    inline: true
+                });
+            }
         }
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -500,6 +520,9 @@ const handleListCommand = async (interaction) => {
     try {
         const webhooks = await db.getGuildWebhooks(guildId);
         
+        // Backwards compatibility: Update guild user info if missing
+        await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
+        
         if (webhooks.length === 0) {
             await interaction.reply({ 
                 content: '❌ No webhooks configured in this server.', 
@@ -515,8 +538,11 @@ const handleListCommand = async (interaction) => {
             .setTimestamp();
 
         webhooks.forEach((webhook, index) => {
+            const statusEmoji = webhook.is_active ? '✅' : '❌';
+            const warningText = webhook.failure_count > 0 ? ` (⚠️ ${webhook.failure_count} failures)` : '';
+            
             embed.addFields({
-                name: `Channel ${index + 1}`,
+                name: `${statusEmoji} Channel ${index + 1}${warningText}`,
                 value: `<#${webhook.channel_id}>\n${webhook.webhook_url}`,
                 inline: false
             });
@@ -534,6 +560,12 @@ const handleListCommand = async (interaction) => {
 
 const handleStatsCommand = async (interaction) => {
     try {
+        // Backwards compatibility: Update guild user info if missing
+        const guildId = interaction.guildId;
+        if (guildId) {
+            await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
+        }
+        
         const stats = await db.getStats();
         
         const embed = new EmbedBuilder()
@@ -557,6 +589,12 @@ const handleStatsCommand = async (interaction) => {
 
 const handlePrivacyCommand = async (interaction) => {
     try {
+        // Backwards compatibility: Update guild user info if missing
+        const guildId = interaction.guildId;
+        if (guildId) {
+            await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
+        }
+        
         const fs = require('fs');
         const path = require('path');
         
@@ -832,6 +870,20 @@ client.once('ready', async () => {
         console.log('Bot is ready and database backup is scheduled!');
     } catch (error) {
         console.error('Error during initialization:', error);
+    }
+});
+
+// Handle guild join events to track who adds the bot
+client.on('guildCreate', async (guild) => {
+    console.log(`Bot added to guild: ${guild.name} (${guild.id})`);
+    
+    try {
+        // Note: We can't determine who invited the bot from the guildCreate event
+        // User information will be captured when they first interact with slash commands
+        await db.storeGuild(guild.id, guild.name);
+        console.log(`✅ Stored guild information for ${guild.name}`);
+    } catch (error) {
+        console.error('Error storing guild information:', error);
     }
 });
 
