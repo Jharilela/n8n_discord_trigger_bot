@@ -33,7 +33,7 @@ const http = require('http');
 const replyEphemeral = (interaction, options) => {
     return interaction.reply({
         ...options,
-        ephemeral: true
+        flags: 64 // MessageFlags.Ephemeral
     });
 };
 
@@ -231,7 +231,7 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
         }
         
         // Record the failure in database
-        const result = await db.recordWebhookFailure(channelId, errorMessage);
+        const result = await db.recordWebhookFailure(channelId, errorMessage, shouldDisable);
         
         if (result.disabled) {
             console.warn(`🚫 Webhook for channel ${channelId} auto-disabled after repeated failures`);
@@ -381,13 +381,18 @@ const handleSetupCommand = async (interaction) => {
         return;
     }
 
+    // Acknowledge interaction immediately to prevent timeout
+    await replyEphemeral(interaction, { 
+        content: '⏳ Testing webhook connection and setting up...' 
+    });
+
     // Test the webhook by sending a POST request
     try {
         const testPayload = {
             event_type: 'test_webhook',
             message: 'This is a test from your Discord bot setup. If you see this, your webhook is working!'
         };
-        const response = await axios.post(webhookUrl, testPayload, { timeout: 5000 });
+        const response = await axios.post(webhookUrl, testPayload, { timeout: 3000 });
         if (response.status < 200 || response.status >= 300) {
             throw new Error(`Received status code ${response.status}`);
         }
@@ -400,7 +405,7 @@ const handleSetupCommand = async (interaction) => {
         } else {
             errorMsg += `\nError: ${error.message}`;
         }
-        await interaction.reply({ content: errorMsg, ephemeral: true });
+        await interaction.editReply({ content: errorMsg });
         return;
     }
 
@@ -422,12 +427,11 @@ const handleSetupCommand = async (interaction) => {
             )
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
     } catch (error) {
         console.error('Error setting up webhook:', error);
-        await interaction.reply({ 
-            content: '❌ Failed to set up webhook. Please try again.', 
-            ephemeral: true 
+        await interaction.editReply({ 
+            content: '❌ Failed to set up webhook. Please try again.'
         });
     }
 };

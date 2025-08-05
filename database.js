@@ -168,9 +168,26 @@ const db = {
     },
 
     // Record webhook failure
-    recordWebhookFailure: async (channelId, errorMessage) => {
+    recordWebhookFailure: async (channelId, errorMessage, immediateDisable = false) => {
         try {
             const MAX_FAILURES = 5; // Disable after 5 consecutive failures
+            
+            // If immediate disable (404, 403, 410 errors), disable right away
+            if (immediateDisable) {
+                await pool.query(`
+                    UPDATE channel_webhooks 
+                    SET 
+                        failure_count = failure_count + 1,
+                        last_failure_at = CURRENT_TIMESTAMP,
+                        is_active = false,
+                        disabled_reason = $2,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE channel_id = $1
+                `, [channelId, `Auto-disabled due to permanent error: ${errorMessage}`]);
+                
+                console.warn(`🚫 Webhook immediately disabled for channel ${channelId}: ${errorMessage}`);
+                return { disabled: true, immediate: true };
+            }
             
             const result = await pool.query(`
                 UPDATE channel_webhooks 
