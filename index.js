@@ -545,12 +545,11 @@ const handleStatusCommand = async (interaction) => {
             }
         }
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await replyEphemeral(interaction, { embeds: [embed] });
     } catch (error) {
         console.error('Error getting status:', error);
-        await interaction.reply({ 
-            content: '❌ Failed to get status. Please try again.', 
-            ephemeral: true 
+        await replyEphemeral(interaction, { 
+            content: '❌ Failed to get status. Please try again.'
         });
     }
 };
@@ -565,9 +564,8 @@ const handleListCommand = async (interaction) => {
         await db.updateGuildUserInfo(guildId, interaction.user.id, interaction.user.tag);
         
         if (webhooks.length === 0) {
-            await interaction.reply({ 
-                content: '❌ No webhooks configured in this server.', 
-                ephemeral: true 
+            await replyEphemeral(interaction, { 
+                content: '❌ No webhooks configured in this server.'
             });
             return;
         }
@@ -589,12 +587,11 @@ const handleListCommand = async (interaction) => {
             });
         });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await replyEphemeral(interaction, { embeds: [embed] });
     } catch (error) {
         console.error('Error listing webhooks:', error);
-        await interaction.reply({ 
-            content: '❌ Failed to list webhooks. Please try again.', 
-            ephemeral: true 
+        await replyEphemeral(interaction, { 
+            content: '❌ Failed to list webhooks. Please try again.'
         });
     }
 };
@@ -608,7 +605,8 @@ const handleStatsCommand = async (interaction) => {
         }
         
         const stats = await db.getStats();
-        const adminCount = await db.pool.query('SELECT COUNT(*) FROM server_admins');
+        const { pool } = require('./database');
+        const adminCount = await pool.query('SELECT COUNT(*) FROM server_admins');
         
         const embed = new EmbedBuilder()
             .setColor('#0099ff')
@@ -620,12 +618,11 @@ const handleStatsCommand = async (interaction) => {
             )
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await replyEphemeral(interaction, { embeds: [embed] });
     } catch (error) {
         console.error('Error getting stats:', error);
-        await interaction.reply({ 
-            content: '❌ Failed to get statistics. Please try again.', 
-            ephemeral: true 
+        await replyEphemeral(interaction, { 
+            content: '❌ Failed to get statistics. Please try again.'
         });
     }
 };
@@ -644,9 +641,8 @@ const handlePrivacyCommand = async (interaction) => {
         const privacyPolicyPath = path.join(__dirname, 'PRIVACY_POLICY.md');
         
         if (!fs.existsSync(privacyPolicyPath)) {
-            await interaction.reply({ 
-                content: '❌ Privacy policy file not found.', 
-                ephemeral: true 
+            await replyEphemeral(interaction, { 
+                content: '❌ Privacy policy file not found.'
             });
             return;
         }
@@ -669,7 +665,7 @@ const handlePrivacyCommand = async (interaction) => {
                 })
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await replyEphemeral(interaction, { embeds: [embed] });
         } else {
             const embed = new EmbedBuilder()
                 .setColor('#0099ff')
@@ -677,13 +673,12 @@ const handlePrivacyCommand = async (interaction) => {
                 .setDescription('```\n' + privacyContent + '\n```')
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await replyEphemeral(interaction, { embeds: [embed] });
         }
     } catch (error) {
         console.error('Error handling privacy command:', error);
-        await interaction.reply({ 
-            content: '❌ Failed to load privacy policy. Please try again.', 
-            ephemeral: true 
+        await replyEphemeral(interaction, { 
+            content: '❌ Failed to load privacy policy. Please try again.'
         });
     }
 };

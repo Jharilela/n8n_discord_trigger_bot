@@ -112,9 +112,25 @@ const db = {
             console.log(`🔗 [WEBHOOK_SETUP] Guild: ${guildId}`);
             console.log(`🔗 [WEBHOOK_SETUP] Webhook URL: ${webhookUrl}`);
             
-            // Track the admin first
+            // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                await db.trackServerAdmin(userId, username);
+                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
+                
+                const adminUpsert = await pool.query(`
+                    INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET 
+                        username = EXCLUDED.username,
+                        display_name = EXCLUDED.display_name,  
+                        last_seen = CURRENT_TIMESTAMP,
+                        interaction_count = server_admins.interaction_count + 1
+                    RETURNING *
+                `, [userId, username, null]);
+                
+                const adminResult = adminUpsert.rows[0];
+                const isNew = adminResult.interaction_count === 1;
+                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
             }
             
             const result = await pool.query(`
@@ -176,9 +192,25 @@ const db = {
             console.log(`🏰 [GUILD_SETUP] Storing guild: ${guildName} (${guildId})`);
             console.log(`🏰 [GUILD_SETUP] Added by: ${username} (${userId})`);
             
-            // Track the admin first
+            // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                await db.trackServerAdmin(userId, username);
+                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
+                
+                const adminUpsert = await pool.query(`
+                    INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET 
+                        username = EXCLUDED.username,
+                        display_name = EXCLUDED.display_name,  
+                        last_seen = CURRENT_TIMESTAMP,
+                        interaction_count = server_admins.interaction_count + 1
+                    RETURNING *
+                `, [userId, username, null]);
+                
+                const adminResult = adminUpsert.rows[0];
+                const isNew = adminResult.interaction_count === 1;
+                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
             }
             
             await pool.query(`
@@ -302,9 +334,25 @@ const db = {
             console.log(`🔄 [BACKWARDS_COMPAT] Checking webhook user info for channel ${channelId}`);
             console.log(`🔄 [BACKWARDS_COMPAT] Updating with user: ${username} (${userId})`);
             
-            // Track the admin first
+            // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                await db.trackServerAdmin(userId, username);
+                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
+                
+                const adminUpsert = await pool.query(`
+                    INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET 
+                        username = EXCLUDED.username,
+                        display_name = EXCLUDED.display_name,  
+                        last_seen = CURRENT_TIMESTAMP,
+                        interaction_count = server_admins.interaction_count + 1
+                    RETURNING *
+                `, [userId, username, null]);
+                
+                const adminResult = adminUpsert.rows[0];
+                const isNew = adminResult.interaction_count === 1;
+                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
             }
             
             const result = await pool.query(`
@@ -337,9 +385,25 @@ const db = {
             console.log(`🔄 [BACKWARDS_COMPAT] Checking guild user info for guild ${guildId}`);
             console.log(`🔄 [BACKWARDS_COMPAT] Updating with user: ${username} (${userId})`);
             
-            // Track the admin first
+            // Track the admin first (inline to avoid circular reference)
             if (userId && username) {
-                await db.trackServerAdmin(userId, username);
+                console.log(`🔍 [USER_TRACKING] Tracking admin: ${username} (${userId})`);
+                
+                const adminUpsert = await pool.query(`
+                    INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET 
+                        username = EXCLUDED.username,
+                        display_name = EXCLUDED.display_name,  
+                        last_seen = CURRENT_TIMESTAMP,
+                        interaction_count = server_admins.interaction_count + 1
+                    RETURNING *
+                `, [userId, username, null]);
+                
+                const adminResult = adminUpsert.rows[0];
+                const isNew = adminResult.interaction_count === 1;
+                console.log(`✅ [USER_TRACKING] ${isNew ? 'New' : 'Existing'} admin tracked: ${username} (interactions: ${adminResult.interaction_count})`);
             }
             
             const result = await pool.query(`
