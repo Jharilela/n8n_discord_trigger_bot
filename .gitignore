@@ -56,3 +56,6 @@ data/
 
 # Claude
 .claude/
+
+# Debugging one time scripts
+scripts/

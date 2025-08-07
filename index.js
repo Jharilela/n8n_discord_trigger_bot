@@ -232,6 +232,12 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
             errorMessage = error.message;
         }
         
+        // Determine if this is a temporary error first
+        const isTemporaryError = (error.response?.status === 408) || 
+                                (error.response?.status >= 500) || 
+                                (error.code === 'ECONNABORTED') || 
+                                (error.code === 'ENOTFOUND');
+        
         // Debug logging shows full error details
         if (DEBUG) {
             console.error(`[DEBUG] ❌ Full error details for ${webhookUrl}:`);
@@ -246,12 +252,6 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
         } else {
             console.error(`❌ Error forwarding ${eventType} to webhook ${webhookUrl}: ${errorMessage}`);
         }
-        
-        // Record the failure in database - but don't count temporary errors toward failure limit
-        const isTemporaryError = (error.response?.status === 408) || 
-                                (error.response?.status >= 500) || 
-                                (error.code === 'ECONNABORTED') || 
-                                (error.code === 'ENOTFOUND');
         
         // Never disable immediately - all errors count towards the 5-failure limit only
         const result = await db.recordWebhookFailure(channelId, errorMessage, false, !isTemporaryError);

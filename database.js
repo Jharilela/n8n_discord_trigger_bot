@@ -104,11 +104,34 @@ const db = {
                 [channelId]
             );
             const DEBUG = process.env.DEBUG === 'true';
-            if (DEBUG && result.rows[0]) {
-                console.log(`[DEBUG] Found webhook for channel ${channelId}: active=${result.rows[0].is_active}, failures=${result.rows[0].failure_count}`);
-            } else if (DEBUG) {
-                console.log(`[DEBUG] No active webhook found for channel ${channelId}`);
+            
+            if (DEBUG) {
+                // Also check if there's ANY webhook for this channel (active or inactive)
+                const allResult = await pool.query(
+                    'SELECT webhook_url, is_active, failure_count, disabled_reason FROM channel_webhooks WHERE channel_id = $1',
+                    [channelId]
+                );
+                
+                if (allResult.rows[0]) {
+                    const webhook = allResult.rows[0];
+                    console.log(`[DEBUG] 🔍 Webhook found for channel ${channelId}:`);
+                    console.log(`[DEBUG] - Active: ${webhook.is_active}`);
+                    console.log(`[DEBUG] - Failures: ${webhook.failure_count}`);
+                    console.log(`[DEBUG] - Disabled reason: "${webhook.disabled_reason || 'none'}"`);
+                    console.log(`[DEBUG] - URL: ${webhook.webhook_url}`);
+                    if (!webhook.is_active) {
+                        console.log(`[DEBUG] ⚠️ 🚫 WEBHOOK IS DISABLED - This is why messages aren't forwarding!`);
+                        console.log(`[DEBUG] 🔧 To fix: Use /setup command with the webhook URL to re-enable it`);
+                    }
+                } else {
+                    console.log(`[DEBUG] ❌ No webhook configured at all for channel ${channelId}`);
+                }
             }
+            
+            if (DEBUG && result.rows[0]) {
+                console.log(`[DEBUG] Found ACTIVE webhook for channel ${channelId}: failures=${result.rows[0].failure_count}`);
+            }
+            
             return result.rows[0]?.webhook_url || null;
         } catch (error) {
             console.error('Error getting channel webhook:', error);
