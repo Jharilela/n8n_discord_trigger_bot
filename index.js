@@ -4,6 +4,9 @@ require('dotenv').config();
 const requiredEnvVars = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DATABASE_URL'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
+// Debug mode for detailed logging
+const DEBUG = process.env.DEBUG === 'true';
+
 if (missingEnvVars.length > 0) {
     console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
     console.error('Please set these variables in your environment or .env file');
@@ -186,36 +189,42 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
             ...data
         };
 
-        // Production logging shows event type and webhook URL but no payload content
-        if (isProduction) {
+        // Debug logging shows everything
+        if (DEBUG) {
+            console.log(`[DEBUG] Sending ${eventType} to ${webhookUrl}`);
+            console.log(`[DEBUG] Payload:`, JSON.stringify(payload, null, 2));
+        } else if (isProduction) {
             console.log(`${eventType} → ${webhookUrl}`);
         } else {
             console.log(`Sending ${eventType} to webhook ${webhookUrl}`);
         }
 
-        await axios.post(webhookUrl, payload, { timeout: 10000 });
+        const response = await axios.post(webhookUrl, payload, { timeout: 10000 });
+        
+        // Debug logging for response
+        if (DEBUG) {
+            console.log(`[DEBUG] Response status: ${response.status}`);
+            console.log(`[DEBUG] Response headers:`, response.headers);
+            console.log(`[DEBUG] Response data:`, response.data);
+        }
         
         // Record success - reset failure count
         await db.recordWebhookSuccess(channelId);
         
-        if (!isProduction) {
+        if (DEBUG) {
+            console.log(`[DEBUG] ✅ Successfully forwarded ${eventType} - failure count reset`);
+        } else if (!isProduction) {
             console.log(`✅ Successfully forwarded ${eventType} to ${webhookUrl}`);
         }
         
     } catch (error) {
         // Extract meaningful error information
         let errorMessage = 'Unknown error';
-        let shouldDisable = false;
         
         if (error.response) {
             // HTTP error response (4xx, 5xx)
             const status = error.response.status;
             errorMessage = `HTTP ${status}: ${error.response.data?.message || error.response.statusText}`;
-            
-            // These errors indicate the webhook is permanently broken
-            if (status === 404 || status === 403 || status === 410) {
-                shouldDisable = true;
-            }
         } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNABORTED') {
             // DNS or timeout errors - might be temporary
             errorMessage = `Connection error: ${error.code}`;
@@ -223,8 +232,16 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
             errorMessage = error.message;
         }
         
-        // Always log errors but with less detail in production
-        if (isProduction) {
+        // Debug logging shows full error details
+        if (DEBUG) {
+            console.error(`[DEBUG] ❌ Full error details for ${webhookUrl}:`);
+            console.error(`[DEBUG] Error message: ${errorMessage}`);
+            console.error(`[DEBUG] Error code: ${error.code}`);
+            console.error(`[DEBUG] Response status: ${error.response?.status}`);
+            console.error(`[DEBUG] Response data:`, error.response?.data);
+            console.error(`[DEBUG] Is temporary error: ${isTemporaryError}`);
+            console.error(`[DEBUG] Full error:`, error);
+        } else if (isProduction) {
             console.error(`Webhook error for ${webhookUrl}: ${error.response?.status || error.code}`);
         } else {
             console.error(`❌ Error forwarding ${eventType} to webhook ${webhookUrl}: ${errorMessage}`);
@@ -236,21 +253,24 @@ const sendToN8n = async (data, eventType, webhookUrl, channelId) => {
                                 (error.code === 'ECONNABORTED') || 
                                 (error.code === 'ENOTFOUND');
         
-        const result = await db.recordWebhookFailure(channelId, errorMessage, shouldDisable, !isTemporaryError);
+        // Never disable immediately - all errors count towards the 5-failure limit only
+        const result = await db.recordWebhookFailure(channelId, errorMessage, false, !isTemporaryError);
         
         if (result.disabled) {
-            if (result.immediate) {
-                console.warn(`🚫 Webhook ${webhookUrl} immediately disabled due to permanent error`);
-            } else {
-                console.warn(`🚫 Webhook ${webhookUrl} auto-disabled after 5 consecutive failures`);
-            }
+            console.warn(`🚫 Webhook ${webhookUrl} auto-disabled after 5 consecutive failures`);
         } else if (result.temporary) {
             // Don't log temporary errors in production to reduce noise
-            if (!isProduction) {
+            if (DEBUG) {
+                console.log(`[DEBUG] ⚠️  Temporary error for webhook ${webhookUrl} (not counted towards limit)`);
+            } else if (!isProduction) {
                 console.log(`⚠️  Temporary error for webhook ${webhookUrl} (not counted towards limit)`);
             }
-        } else if (result.failureCount && !isProduction) {
-            console.warn(`⚠️  Webhook ${webhookUrl} failure count: ${result.failureCount}/5`);
+        } else if (result.failureCount) {
+            if (DEBUG) {
+                console.warn(`[DEBUG] ⚠️  Webhook ${webhookUrl} failure count: ${result.failureCount}/5`);
+            } else if (!isProduction) {
+                console.warn(`⚠️  Webhook ${webhookUrl} failure count: ${result.failureCount}/5`);
+            }
         }
     }
 };
@@ -667,11 +687,22 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
     try {
+        if (DEBUG) {
+            console.log(`[DEBUG] Processing message from ${message.author.tag} in channel ${message.channelId}`);
+        }
+        
         // Get webhook URL for this channel
         const webhookUrl = await db.getChannelWebhook(message.channelId);
         
+        if (DEBUG) {
+            console.log(`[DEBUG] Webhook URL found for channel ${message.channelId}: ${webhookUrl || 'None'}`);
+        }
+        
         if (!webhookUrl) {
             // No webhook configured for this channel, skip processing
+            if (DEBUG) {
+                console.log(`[DEBUG] No active webhook configured for channel ${message.channelId}, skipping message`);
+            }
             return;
         }
 
@@ -679,9 +710,16 @@ client.on('messageCreate', async (message) => {
         const eventType = isThread ? 'thread_message' : 'message_create';
         const messageData = createEventData(message, eventType, { isThread });
         
+        if (DEBUG) {
+            console.log(`[DEBUG] Sending ${eventType} for message: "${message.content}"`);
+        }
+        
         await sendToN8n(messageData, eventType, webhookUrl, message.channelId);
     } catch (error) {
         console.error('Error processing message:', error);
+        if (DEBUG) {
+            console.error('[DEBUG] Full message processing error:', error);
+        }
     }
 });
 

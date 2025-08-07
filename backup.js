@@ -99,6 +99,10 @@ const exportToCSV = async () => {
         const guildsResult = await client.query('SELECT * FROM guilds ORDER BY created_at');
         const guildsFile = path.join(backupDir, 'guilds.csv');
         
+        // Export server_admins table
+        const adminsResult = await client.query('SELECT * FROM server_admins ORDER BY first_seen');
+        const adminsFile = path.join(backupDir, 'server_admins.csv');
+        
         if (guildsResult.rows.length > 0) {
             const headers = Object.keys(guildsResult.rows[0]).join(',');
             const rows = guildsResult.rows.map(row => 
@@ -116,12 +120,30 @@ const exportToCSV = async () => {
             console.log('No guild records to export');
         }
         
+        if (adminsResult.rows.length > 0) {
+            const headers = Object.keys(adminsResult.rows[0]).join(',');
+            const rows = adminsResult.rows.map(row => 
+                Object.values(row).map(value => 
+                    typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value
+                ).join(',')
+            );
+            const csvContent = [headers, ...rows].join('\n');
+            fs.writeFileSync(adminsFile, csvContent);
+            console.log(`Exported ${adminsResult.rows.length} admin records`);
+        } else {
+            // Create empty file with headers
+            const headers = 'user_id,username,display_name,first_seen,last_seen,interaction_count';
+            fs.writeFileSync(adminsFile, headers);
+            console.log('No admin records to export');
+        }
+        
         // Create metadata file
         const metadata = {
             timestamp: new Date().toISOString(),
             webhookCount: webhooksResult.rows.length,
             guildCount: guildsResult.rows.length,
-            version: '1.0'
+            adminCount: adminsResult.rows.length,
+            version: '1.1'
         };
         const metadataFile = path.join(backupDir, 'metadata.json');
         fs.writeFileSync(metadataFile, JSON.stringify(metadata, null, 2));
@@ -170,10 +192,15 @@ const pushToGitHub = async (backupDir) => {
             'User-Agent': 'n8n-discord-bot'
         };
         
+        // Read admin file
+        const adminsFile = path.join(backupDir, 'server_admins.csv');
+        const adminsContent = fs.existsSync(adminsFile) ? fs.readFileSync(adminsFile, 'utf8') : '';
+        
         // Create/update files via GitHub API
         const files = [
             { path: `data/${backupName}/channel_webhooks.csv`, content: webhooksContent },
             { path: `data/${backupName}/guilds.csv`, content: guildsContent },
+            { path: `data/${backupName}/server_admins.csv`, content: adminsContent },
             { path: `data/${backupName}/metadata.json`, content: metadataContent }
         ];
         

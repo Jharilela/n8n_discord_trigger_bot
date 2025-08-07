@@ -100,9 +100,15 @@ const db = {
     getChannelWebhook: async (channelId) => {
         try {
             const result = await pool.query(
-                'SELECT webhook_url FROM channel_webhooks WHERE channel_id = $1 AND is_active = true',
+                'SELECT webhook_url, is_active, failure_count FROM channel_webhooks WHERE channel_id = $1 AND is_active = true',
                 [channelId]
             );
+            const DEBUG = process.env.DEBUG === 'true';
+            if (DEBUG && result.rows[0]) {
+                console.log(`[DEBUG] Found webhook for channel ${channelId}: active=${result.rows[0].is_active}, failures=${result.rows[0].failure_count}`);
+            } else if (DEBUG) {
+                console.log(`[DEBUG] No active webhook found for channel ${channelId}`);
+            }
             return result.rows[0]?.webhook_url || null;
         } catch (error) {
             console.error('Error getting channel webhook:', error);
@@ -246,22 +252,8 @@ const db = {
         try {
             const MAX_FAILURES = 5; // Disable after 5 consecutive failures
             
-            // If immediate disable (404, 403, 410 errors), disable right away
-            if (immediateDisable) {
-                await pool.query(`
-                    UPDATE channel_webhooks 
-                    SET 
-                        failure_count = failure_count + 1,
-                        last_failure_at = CURRENT_TIMESTAMP,
-                        is_active = false,
-                        disabled_reason = $2,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE channel_id = $1
-                `, [channelId, `Auto-disabled due to permanent error: ${errorMessage}`]);
-                
-                console.warn(`🚫 Webhook immediately disabled due to permanent error: ${errorMessage}`);
-                return { disabled: true, immediate: true };
-            }
+            // Note: immediateDisable parameter is kept for backward compatibility but ignored
+            // All webhooks are only disabled after reaching 5 consecutive failures
             
             // Only count certain errors towards the failure limit
             if (!countTowardsLimit) {
@@ -274,7 +266,12 @@ const db = {
                     WHERE channel_id = $1
                 `, [channelId]);
                 
-                console.log(`⚠️ Temporary error (not counted): ${errorMessage}`);
+                const DEBUG = process.env.DEBUG === 'true';
+                if (DEBUG) {
+                    console.log(`[DEBUG] ⚠️ Temporary error (not counted): ${errorMessage}`);
+                } else {
+                    console.log(`⚠️ Temporary error (not counted): ${errorMessage}`);
+                }
                 return { disabled: false, temporary: true };
             }
             
@@ -298,7 +295,12 @@ const db = {
                     WHERE channel_id = $1
                 `, [channelId, `Auto-disabled after ${MAX_FAILURES} consecutive failures: ${errorMessage}`]);
                 
-                console.warn(`🚫 Webhook auto-disabled after ${MAX_FAILURES} consecutive failures`);
+                const DEBUG = process.env.DEBUG === 'true';
+                if (DEBUG) {
+                    console.warn(`[DEBUG] 🚫 Webhook auto-disabled after ${MAX_FAILURES} consecutive failures: ${errorMessage}`);
+                } else {
+                    console.warn(`🚫 Webhook auto-disabled after ${MAX_FAILURES} consecutive failures`);
+                }
                 return { disabled: true, guildId: result.rows[0].guild_id };
             }
             
@@ -312,14 +314,20 @@ const db = {
     // Record webhook success (reset failure count)
     recordWebhookSuccess: async (channelId) => {
         try {
-            await pool.query(`
+            const result = await pool.query(`
                 UPDATE channel_webhooks 
                 SET 
                     failure_count = 0,
                     last_failure_at = NULL,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE channel_id = $1
+                RETURNING failure_count
             `, [channelId]);
+            
+            const DEBUG = process.env.DEBUG === 'true';
+            if (DEBUG && result.rows[0]) {
+                console.log(`[DEBUG] Reset failure count for channel ${channelId} to 0`);
+            }
         } catch (error) {
             console.error('Error recording webhook success:', error);
         }
