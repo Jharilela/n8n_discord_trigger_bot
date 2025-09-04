@@ -959,24 +959,24 @@ const sendWelcomeDM = async (guild) => {
                     name: '📋 Quick Setup Guide',
                     value: '1️⃣ **Create a webhook in n8n** - Set your workflow to production and copy the webhook production URL\n' +
                            '2️⃣ **Set up the channel** - Go to your Discord channel and use `/setup` command followed by your webhook URL\n' +
-                           '3️⃣ **Test it out** - Send a message and check your n8n executions to confirm it\'s working!',
+                           '3️⃣ **Test it out** - Send a message and check your n8n executions to confirm it\'s working!\n\u200B',
                     inline: false
                 },
                 {
                     name: '🔧 Useful Commands',
                     value: '• `/status` - Check if your channel is configured correctly\n' +
                            '• `/list` - View all webhooks configured in your server\n' +
-                           '• `/remove` - Remove webhook from a channel',
+                           '• `/remove` - Remove webhook from a channel\n\u200B',
                     inline: false
                 },
                 {
                     name: '⚠️ Important Note',
-                    value: 'Keep your n8n workflow **active in production**! If the bot fails to send 5 consecutive messages to your webhook, it will temporarily disable the webhook to prevent spam.',
+                    value: 'Keep your n8n workflow **active in production**! If the bot fails to send 5 consecutive messages to your webhook, it will temporarily disable the webhook to prevent spam.\n\u200B',
                     inline: false
                 },
                 {
                     name: '🆘 Need Help?',
-                    value: 'Join our community of AI and Automation explorers!\n[Discord Support Server](https://discord.gg/P8geEGAFGD)\n\nLook for the support channel for n8n-discord-trigger-bot',
+                    value: 'Join our community of AI and Automation explorers!\n\n[Discord Support Server](https://discord.gg/P8geEGAFGD)\n\nLook for the support channel #🤖│n8n-discord-trigger-bot',
                     inline: false
                 }
             )
