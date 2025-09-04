@@ -929,17 +929,83 @@ client.once('ready', async () => {
     }
 });
 
-// Handle guild join events to track who adds the bot
+// Function to send welcome DM with setup tutorial
+const sendWelcomeDM = async (guild) => {
+    try {
+        // Try to get the guild owner first
+        let targetUser = guild.ownerId ? await client.users.fetch(guild.ownerId) : null;
+        
+        // If owner is not available, try to find an administrator
+        if (!targetUser) {
+            const members = await guild.members.fetch();
+            const admin = members.find(member => 
+                member.permissions.has(PermissionFlagsBits.Administrator) && 
+                !member.user.bot
+            );
+            targetUser = admin ? admin.user : null;
+        }
+        
+        if (!targetUser) {
+            console.log('Could not find a suitable user to send welcome DM');
+            return;
+        }
+        
+        const welcomeEmbed = new EmbedBuilder()
+            .setColor('#00ff00')
+            .setTitle('🎉 Welcome to n8n Discord Trigger Bot!')
+            .setDescription('Thanks for adding me to your server! Here\'s how to get started with Discord and n8n integration:')
+            .addFields(
+                {
+                    name: '📋 Quick Setup Guide',
+                    value: '1️⃣ **Create a webhook in n8n** - Set your workflow to production and copy the webhook production URL\n' +
+                           '2️⃣ **Set up the channel** - Go to your Discord channel and use `/setup` command followed by your webhook URL\n' +
+                           '3️⃣ **Test it out** - Send a message and check your n8n executions to confirm it\'s working!',
+                    inline: false
+                },
+                {
+                    name: '🔧 Useful Commands',
+                    value: '• `/status` - Check if your channel is configured correctly\n' +
+                           '• `/list` - View all webhooks configured in your server\n' +
+                           '• `/remove` - Remove webhook from a channel',
+                    inline: false
+                },
+                {
+                    name: '⚠️ Important Note',
+                    value: 'Keep your n8n workflow **active in production**! If the bot fails to send 5 consecutive messages to your webhook, it will temporarily disable the webhook to prevent spam.',
+                    inline: false
+                },
+                {
+                    name: '🆘 Need Help?',
+                    value: 'Join our community of AI and Automation explorers!\n[Discord Support Server](https://discord.gg/P8geEGAFGD)\n\nLook for the support channel for n8n-discord-trigger-bot',
+                    inline: false
+                }
+            )
+            .setFooter({ text: 'Happy automating! 🤖' })
+            .setTimestamp();
+        
+        await targetUser.send({ embeds: [welcomeEmbed] });
+        console.log(`✅ Welcome DM sent to ${targetUser.tag} for guild ${guild.name}`);
+        
+    } catch (error) {
+        console.error('Error sending welcome DM:', error.message);
+        // Don't throw the error as this is not critical to bot functionality
+    }
+};
+
+// Handle guild join events to track who adds the bot and send welcome DM
 client.on('guildCreate', async (guild) => {
     console.log(`Bot added to guild: ${guild.name} (${guild.id})`);
     
     try {
-        // Note: We can't determine who invited the bot from the guildCreate event
-        // User information will be captured when they first interact with slash commands
+        // Store guild information
         await db.storeGuild(guild.id, guild.name);
         console.log(`✅ Stored guild information for ${guild.name}`);
+        
+        // Send welcome DM to guild owner or first administrator
+        await sendWelcomeDM(guild);
+        
     } catch (error) {
-        console.error('Error storing guild information:', error);
+        console.error('Error handling guild join:', error);
     }
 });
 
