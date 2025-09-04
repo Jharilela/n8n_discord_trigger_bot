@@ -957,7 +957,7 @@ const sendWelcomeDM = async (guild) => {
             .addFields(
                 {
                     name: '📋 Quick Setup Guide',
-                    value: '1️⃣ **Create a webhook in n8n** - Set your workflow to production and copy the webhook production URL\n' +
+                    value: '1️⃣ **Create a webhook in n8n** - Configure it to receive POST requests, set your workflow to production and copy the webhook production URL\n' +
                            '2️⃣ **Set up the channel** - Go to your Discord channel and use `/setup` command followed by your webhook URL\n' +
                            '3️⃣ **Test it out** - Send a message and check your n8n executions to confirm it\'s working!\n\u200B',
                     inline: false
