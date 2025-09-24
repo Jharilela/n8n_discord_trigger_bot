@@ -278,21 +278,26 @@ const restoreFromCSV = async (backupDir) => {
         if (fs.existsSync(webhooksFile)) {
             const webhooksContent = fs.readFileSync(webhooksFile, 'utf8');
             const lines = webhooksContent.split('\n').filter(line => line.trim());
-            
+
             if (lines.length > 1) { // Has data beyond header
                 // Clear existing data
                 await client.query('DELETE FROM channel_webhooks');
-                
+
+                // Get headers from first line
+                const headers = lines[0].split(',');
+                const placeholders = headers.map((_, i) => `$${i + 1}`).join(', ');
+                const columnNames = headers.join(', ');
+
                 // Parse CSV and insert data
                 for (let i = 1; i < lines.length; i++) {
-                    const values = lines[i].split(',').map(val => 
-                        val.startsWith('"') && val.endsWith('"') ? 
+                    const values = lines[i].split(',').map(val =>
+                        val.startsWith('"') && val.endsWith('"') ?
                         val.slice(1, -1).replace(/""/g, '"') : val
                     );
-                    
+
                     await client.query(`
-                        INSERT INTO channel_webhooks (id, channel_id, webhook_url, guild_id, created_at, updated_at)
-                        VALUES ($1, $2, $3, $4, $5, $6)
+                        INSERT INTO channel_webhooks (${columnNames})
+                        VALUES (${placeholders})
                     `, values);
                 }
                 console.log(`Restored ${lines.length - 1} webhook records`);

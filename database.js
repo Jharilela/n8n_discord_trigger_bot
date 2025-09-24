@@ -28,15 +28,19 @@ const initDatabase = async () => {
         `);
 
         // Add new columns to existing table if they don't exist
-        await client.query(`
-            ALTER TABLE channel_webhooks 
-            ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS last_failure_at TIMESTAMP,
-            ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
-            ADD COLUMN IF NOT EXISTS disabled_reason TEXT,
-            ADD COLUMN IF NOT EXISTS registered_by_user_id VARCHAR(20),
-            ADD COLUMN IF NOT EXISTS registered_by_username VARCHAR(100)
-        `);
+        const columnsToAdd = [
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0',
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS last_failure_at TIMESTAMP',
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true',
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS disabled_reason TEXT',
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS registered_by_user_id VARCHAR(20)',
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS registered_by_username VARCHAR(100)',
+            'ALTER TABLE channel_webhooks ADD COLUMN IF NOT EXISTS send_bot_messages BOOLEAN DEFAULT false'
+        ];
+
+        for (const columnQuery of columnsToAdd) {
+            await client.query(columnQuery);
+        }
 
         // Create guilds table for additional server info
         await client.query(`
@@ -100,7 +104,7 @@ const db = {
     getChannelWebhook: async (channelId) => {
         try {
             const result = await pool.query(
-                'SELECT webhook_url, is_active, failure_count FROM channel_webhooks WHERE channel_id = $1 AND is_active = true',
+                'SELECT webhook_url, is_active, failure_count, send_bot_messages FROM channel_webhooks WHERE channel_id = $1 AND is_active = true',
                 [channelId]
             );
             const DEBUG = process.env.DEBUG === 'true';
@@ -108,7 +112,7 @@ const db = {
             if (DEBUG) {
                 // Also check if there's ANY webhook for this channel (active or inactive)
                 const allResult = await pool.query(
-                    'SELECT webhook_url, is_active, failure_count, disabled_reason FROM channel_webhooks WHERE channel_id = $1',
+                    'SELECT webhook_url, is_active, failure_count, disabled_reason, send_bot_messages FROM channel_webhooks WHERE channel_id = $1',
                     [channelId]
                 );
                 
@@ -132,7 +136,7 @@ const db = {
                 console.log(`[DEBUG] Found ACTIVE webhook for channel ${channelId}: failures=${result.rows[0].failure_count}`);
             }
             
-            return result.rows[0]?.webhook_url || null;
+            return result.rows[0] || null;
         } catch (error) {
             console.error('Error getting channel webhook:', error);
             return null;
@@ -164,10 +168,10 @@ const db = {
             }
             
             const result = await pool.query(`
-                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_admin_id)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (channel_id) 
-                DO UPDATE SET 
+                INSERT INTO channel_webhooks (channel_id, webhook_url, guild_id, registered_by_admin_id, send_bot_messages)
+                VALUES ($1, $2, $3, $4, false)
+                ON CONFLICT (channel_id)
+                DO UPDATE SET
                     webhook_url = EXCLUDED.webhook_url,
                     guild_id = EXCLUDED.guild_id,
                     registered_by_admin_id = EXCLUDED.registered_by_admin_id,
@@ -454,6 +458,20 @@ const db = {
             return result.rows[0] || null;
         } catch (error) {
             console.error('Error getting webhook details:', error);
+            return null;
+        }
+    },
+
+    // Toggle bot messages setting for a channel
+    toggleBotMessages: async (channelId) => {
+        try {
+            const result = await pool.query(
+                'UPDATE channel_webhooks SET send_bot_messages = NOT send_bot_messages, updated_at = CURRENT_TIMESTAMP WHERE channel_id = $1 RETURNING send_bot_messages',
+                [channelId]
+            );
+            return result.rows[0]?.send_bot_messages || false;
+        } catch (error) {
+            console.error('Error toggling bot messages setting:', error);
             return null;
         }
     },

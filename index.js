@@ -16,16 +16,19 @@ if (missingEnvVars.length > 0) {
 console.log('✅ All required environment variables are set');
 console.log('Environment:', process.env.NODE_ENV || 'development');
 
-const { 
-    Client, 
-    GatewayIntentBits, 
-    Partials, 
-    SlashCommandBuilder, 
-    REST, 
+const {
+    Client,
+    GatewayIntentBits,
+    Partials,
+    SlashCommandBuilder,
+    REST,
     Routes,
     EmbedBuilder,
     PermissionFlagsBits,
-    InteractionResponseFlags
+    InteractionResponseFlags,
+    ButtonBuilder,
+    ButtonStyle,
+    ActionRowBuilder
 } = require('discord.js');
 const axios = require('axios');
 const { initDatabase, db } = require('./database');
@@ -369,6 +372,35 @@ const createEventData = (event, eventType, options = {}) => {
 
 // Slash command handlers
 client.on('interactionCreate', async (interaction) => {
+    // Handle button interactions
+    if (interaction.isButton()) {
+        if (interaction.customId.startsWith('toggle_bot_messages_')) {
+            const channelId = interaction.customId.replace('toggle_bot_messages_', '');
+
+            try {
+                const newValue = await db.toggleBotMessages(channelId);
+
+                if (newValue !== null) {
+                    await interaction.reply({
+                        content: newValue
+                            ? '🤖 Bot messages are now **enabled** for this channel!'
+                            : '🚫 Bot messages are now **disabled** for this channel!',
+                        ephemeral: true
+                    });
+                } else {
+                    throw new Error('Failed to update setting');
+                }
+            } catch (error) {
+                console.error('Error toggling bot messages:', error);
+                await interaction.reply({
+                    content: '❌ Failed to toggle bot messages setting. Please try again.',
+                    ephemeral: true
+                });
+            }
+        }
+        return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     const { commandName } = interaction;
@@ -457,7 +489,8 @@ const handleSetupCommand = async (interaction) => {
             .setDescription(`Successfully configured n8n webhook for <#${channelId}>`)
             .addFields(
                 { name: 'Channel', value: `<#${channelId}>`, inline: true },
-                { name: 'Webhook URL', value: webhookUrl, inline: false }
+                { name: 'Webhook URL', value: webhookUrl, inline: false },
+                { name: 'Bot Messages', value: '🚫 Disabled (use `/status` to enable)', inline: true }
             )
             .setTimestamp();
 
@@ -529,10 +562,17 @@ const handleStatusCommand = async (interaction) => {
             .setTimestamp();
 
         if (webhookDetails) {
-            embed.addFields({ 
-                name: 'Webhook URL', 
-                value: webhookDetails.webhook_url, 
-                inline: false 
+            embed.addFields({
+                name: 'Webhook URL',
+                value: webhookDetails.webhook_url,
+                inline: false
+            });
+
+            // Add bot messages status
+            embed.addFields({
+                name: 'Bot Messages',
+                value: webhookDetails.send_bot_messages ? '🤖 Enabled' : '🚫 Disabled',
+                inline: true
             });
 
             if (webhookDetails.failure_count > 0) {
@@ -542,9 +582,20 @@ const handleStatusCommand = async (interaction) => {
                     inline: true
                 });
             }
-        }
 
-        await replyEphemeral(interaction, { embeds: [embed] });
+            // Add toggle button
+            const toggleButton = new ButtonBuilder()
+                .setCustomId(`toggle_bot_messages_${channelId}`)
+                .setLabel(webhookDetails.send_bot_messages ? 'Disable Bot Messages' : 'Enable Bot Messages')
+                .setStyle(webhookDetails.send_bot_messages ? ButtonStyle.Danger : ButtonStyle.Success)
+                .setEmoji(webhookDetails.send_bot_messages ? '🚫' : '🤖');
+
+            const row = new ActionRowBuilder().addComponents(toggleButton);
+
+            await replyEphemeral(interaction, { embeds: [embed], components: [row] });
+        } else {
+            await replyEphemeral(interaction, { embeds: [embed] });
+        }
     } catch (error) {
         console.error('Error getting status:', error);
         await replyEphemeral(interaction, { 
@@ -577,10 +628,11 @@ const handleListCommand = async (interaction) => {
 
         webhooks.forEach((webhook, index) => {
             const statusEmoji = webhook.is_active ? '✅' : '❌';
+            const botMessagesEmoji = webhook.send_bot_messages ? ' 🤖' : '';
             const warningText = webhook.failure_count > 0 ? ` (⚠️ ${webhook.failure_count} failures)` : '';
-            
+
             embed.addFields({
-                name: `${statusEmoji} Channel ${index + 1}${warningText}`,
+                name: `${statusEmoji} Channel ${index + 1}${botMessagesEmoji}${warningText}`,
                 value: `<#${webhook.channel_id}>\n${webhook.webhook_url}`,
                 inline: false
             });
@@ -684,24 +736,30 @@ const handlePrivacyCommand = async (interaction) => {
 
 // Message handler with per-channel webhook routing
 client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-
     try {
         if (DEBUG) {
             console.log(`[DEBUG] Processing message from ${message.author.tag} in channel ${message.channelId}`);
         }
-        
-        // Get webhook URL for this channel
-        const webhookUrl = await db.getChannelWebhook(message.channelId);
-        
+
+        // Get webhook config for this channel
+        const webhookConfig = await db.getChannelWebhook(message.channelId);
+
         if (DEBUG) {
-            console.log(`[DEBUG] Webhook URL found for channel ${message.channelId}: ${webhookUrl || 'None'}`);
+            console.log(`[DEBUG] Webhook config found for channel ${message.channelId}:`, webhookConfig);
         }
-        
-        if (!webhookUrl) {
+
+        if (!webhookConfig) {
             // No webhook configured for this channel, skip processing
             if (DEBUG) {
                 console.log(`[DEBUG] No active webhook configured for channel ${message.channelId}, skipping message`);
+            }
+            return;
+        }
+
+        // Check if message is from bot and if bot messages are disabled for this channel
+        if (message.author.bot && !webhookConfig.send_bot_messages) {
+            if (DEBUG) {
+                console.log(`[DEBUG] Bot message ignored - send_bot_messages is disabled for channel ${message.channelId}`);
             }
             return;
         }
@@ -714,7 +772,7 @@ client.on('messageCreate', async (message) => {
             console.log(`[DEBUG] Sending ${eventType} for message: "${message.content}"`);
         }
         
-        await sendToN8n(messageData, eventType, webhookUrl, message.channelId);
+        await sendToN8n(messageData, eventType, webhookConfig.webhook_url, message.channelId);
     } catch (error) {
         console.error('Error processing message:', error);
         if (DEBUG) {
