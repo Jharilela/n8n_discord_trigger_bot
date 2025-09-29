@@ -312,10 +312,10 @@ const createEventData = (event, eventType, options = {}) => {
     // Base data structure
     const data = {
         content: {
-            text: isReaction ? event.emoji.toString() : 
-                  isThreadEvent ? (eventType.includes('member') ? 
-                    `${eventAuthor.tag} ${eventType.includes('join') ? 'joined' : 'left'} the thread` : 
-                    event.name) : 
+            text: isReaction ? event.emoji.toString() :
+                  isThreadEvent ? (eventType.includes('member') ?
+                    `${eventAuthor.tag} ${eventType.includes('join') ? 'joined' : 'left'} the thread` :
+                    event.name) :
                   message.content,
             type: eventType
         },
@@ -831,13 +831,29 @@ const handleReaction = async (reaction, user, eventType) => {
 client.on('threadCreate', async (thread) => {
     try {
         const webhookUrl = await db.getChannelWebhook(thread.parentId);
-        
+
         if (!webhookUrl) {
             return;
         }
 
+        // Send thread creation event
         const threadData = createEventData(thread, 'thread_create', { isThreadEvent: true });
         await sendToN8n(threadData, 'thread_create', webhookUrl, thread.parentId);
+
+        // Also send the thread starter message if it exists
+        try {
+            const starterMessage = await thread.fetchStarterMessage();
+            if (starterMessage) {
+                const starterMessageData = createEventData(starterMessage, 'thread_starter_message', { isThread: true });
+                await sendToN8n(starterMessageData, 'thread_starter_message', webhookUrl, thread.parentId);
+            }
+        } catch (starterError) {
+            // Starter message might not be available (e.g., in forum posts), that's okay
+            const DEBUG = process.env.DEBUG === 'true';
+            if (DEBUG) {
+                console.log(`[DEBUG] Could not fetch starter message for thread ${thread.id}:`, starterError.message);
+            }
+        }
     } catch (error) {
         console.error('Error processing thread creation:', error);
     }
