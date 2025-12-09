@@ -805,10 +805,10 @@ const handleReaction = async (reaction, user, eventType) => {
     }
 
     try {
-        // Get webhook URL for this channel
-        const webhookUrl = await db.getChannelWebhook(reaction.message.channelId);
+        // Get webhook config for this channel
+        const webhookConfig = await db.getChannelWebhook(reaction.message.channelId);
         
-        if (!webhookUrl) {
+        if (!webhookConfig) {
             // No webhook configured for this channel, skip processing
             return;
         }
@@ -821,7 +821,7 @@ const handleReaction = async (reaction, user, eventType) => {
             author: user 
         });
         
-        await sendToN8n(reactionData, fullEventType, webhookUrl, reaction.message.channelId);
+        await sendToN8n(reactionData, fullEventType, webhookConfig.webhook_url, reaction.message.channelId);
     } catch (error) {
         console.error(`Error processing ${eventType}:`, error);
     }
@@ -830,22 +830,22 @@ const handleReaction = async (reaction, user, eventType) => {
 // Thread event handlers with per-channel webhook routing
 client.on('threadCreate', async (thread) => {
     try {
-        const webhookUrl = await db.getChannelWebhook(thread.parentId);
+        const webhookConfig = await db.getChannelWebhook(thread.parentId);
 
-        if (!webhookUrl) {
+        if (!webhookConfig) {
             return;
         }
 
         // Send thread creation event
         const threadData = createEventData(thread, 'thread_create', { isThreadEvent: true });
-        await sendToN8n(threadData, 'thread_create', webhookUrl, thread.parentId);
+        await sendToN8n(threadData, 'thread_create', webhookConfig.webhook_url, thread.parentId);
 
         // Also send the thread starter message if it exists
         try {
             const starterMessage = await thread.fetchStarterMessage();
             if (starterMessage) {
                 const starterMessageData = createEventData(starterMessage, 'thread_starter_message', { isThread: true });
-                await sendToN8n(starterMessageData, 'thread_starter_message', webhookUrl, thread.parentId);
+                await sendToN8n(starterMessageData, 'thread_starter_message', webhookConfig.webhook_url, thread.parentId);
             }
         } catch (starterError) {
             // Starter message might not be available (e.g., in forum posts), that's okay
@@ -861,14 +861,14 @@ client.on('threadCreate', async (thread) => {
 
 client.on('threadDelete', async (thread) => {
     try {
-        const webhookUrl = await db.getChannelWebhook(thread.parentId);
+        const webhookConfig = await db.getChannelWebhook(thread.parentId);
         
-        if (!webhookUrl) {
+        if (!webhookConfig) {
             return;
         }
 
         const threadData = createEventData(thread, 'thread_delete', { isThreadEvent: true });
-        await sendToN8n(threadData, 'thread_delete', webhookUrl, thread.parentId);
+        await sendToN8n(threadData, 'thread_delete', webhookConfig.webhook_url, thread.parentId);
     } catch (error) {
         console.error('Error processing thread deletion:', error);
     }
@@ -876,9 +876,9 @@ client.on('threadDelete', async (thread) => {
 
 client.on('threadUpdate', async (oldThread, newThread) => {
     try {
-        const webhookUrl = await db.getChannelWebhook(newThread.parentId);
+        const webhookConfig = await db.getChannelWebhook(newThread.parentId);
         
-        if (!webhookUrl) {
+        if (!webhookConfig) {
             return;
         }
 
@@ -909,7 +909,7 @@ client.on('threadUpdate', async (oldThread, newThread) => {
             isThreadEvent: true,
             changes 
         });
-        await sendToN8n(threadData, 'thread_update', webhookUrl, newThread.parentId);
+        await sendToN8n(threadData, 'thread_update', webhookConfig.webhook_url, newThread.parentId);
     } catch (error) {
         console.error('Error processing thread update:', error);
     }
@@ -917,9 +917,9 @@ client.on('threadUpdate', async (oldThread, newThread) => {
 
 client.on('threadMemberAdd', async (member) => {
     try {
-        const webhookUrl = await db.getChannelWebhook(member.thread.parentId);
+        const webhookConfig = await db.getChannelWebhook(member.thread.parentId);
         
-        if (!webhookUrl) {
+        if (!webhookConfig) {
             return;
         }
 
@@ -927,7 +927,7 @@ client.on('threadMemberAdd', async (member) => {
             isThreadEvent: true,
             author: member.user 
         });
-        await sendToN8n(threadData, 'thread_member_join', webhookUrl, member.thread.parentId);
+        await sendToN8n(threadData, 'thread_member_join', webhookConfig.webhook_url, member.thread.parentId);
     } catch (error) {
         console.error('Error processing thread member join:', error);
     }
@@ -935,9 +935,9 @@ client.on('threadMemberAdd', async (member) => {
 
 client.on('threadMemberRemove', async (member) => {
     try {
-        const webhookUrl = await db.getChannelWebhook(member.thread.parentId);
+        const webhookConfig = await db.getChannelWebhook(member.thread.parentId);
         
-        if (!webhookUrl) {
+        if (!webhookConfig) {
             return;
         }
 
@@ -945,7 +945,7 @@ client.on('threadMemberRemove', async (member) => {
             isThreadEvent: true,
             author: member.user 
         });
-        await sendToN8n(threadData, 'thread_member_leave', webhookUrl, member.thread.parentId);
+        await sendToN8n(threadData, 'thread_member_leave', webhookConfig.webhook_url, member.thread.parentId);
     } catch (error) {
         console.error('Error processing thread member leave:', error);
     }
