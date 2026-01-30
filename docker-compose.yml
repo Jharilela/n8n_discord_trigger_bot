@@ -34,6 +34,7 @@ services:
       - GITHUB_USERNAME=${GITHUB_USERNAME:-}
       - GITHUB_REPO=${GITHUB_REPO:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - BACKUP_COMMIT_REF=${BACKUP_COMMIT_REF:-}
     volumes:
       - backup_data:/app/data
     ports:
