@@ -63,20 +63,59 @@ async function listGitHubBackups() {
             'User-Agent': 'n8n-discord-bot'
         };
 
-        // List contents of data directory
-        const response = await axios.get(
-            `https://api.github.com/repos/${githubRepo}/contents/data`,
-            { headers }
-        );
+        // Get the latest commit on main branch first
+        const commitRef = process.env.BACKUP_COMMIT_REF || 'main';
+        console.log(`Fetching backups from ref: ${commitRef}`);
 
-        // Filter for backup directories and sort by name (newest first)
-        const backups = response.data
-            .filter(item => item.type === 'dir' && item.name.startsWith('backup-'))
-            .map(item => item.name)
-            .sort()
-            .reverse();
+        // Fetch all backup directories (handle pagination)
+        let allBackups = [];
+        let page = 1;
+        let hasMore = true;
 
-        return backups;
+        while (hasMore) {
+            const response = await axios.get(
+                `https://api.github.com/repos/${githubRepo}/contents/data?ref=${commitRef}&per_page=100&page=${page}`,
+                { headers }
+            );
+
+            const backups = response.data
+                .filter(item => item.type === 'dir' && item.name.startsWith('backup-'))
+                .map(item => item.name);
+
+            allBackups = allBackups.concat(backups);
+
+            // Check if there are more pages
+            hasMore = response.data.length === 100;
+            page++;
+        }
+
+        console.log(`Found ${allBackups.length} total backups on GitHub`);
+
+        // Sort by parsing the actual date from backup name for accurate ordering
+        // Format: backup-YYYY-MM-DDTHH-MM-SS-mmmZ
+        allBackups.sort((a, b) => {
+            try {
+                // Convert backup-2026-01-30T03-00-00-378Z to 2026-01-30T03:00:00.378Z
+                const parseBackupDate = (name) => {
+                    const dateStr = name.replace('backup-', '');
+                    // backup-2026-01-30T03-00-00-378Z -> 2026-01-30T03:00:00.378Z
+                    const match = dateStr.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/);
+                    if (match) {
+                        return new Date(`${match[1]}T${match[2]}:${match[3]}:${match[4]}.${match[5]}Z`);
+                    }
+                    return new Date(0); // Fallback for malformed names
+                };
+                return parseBackupDate(b) - parseBackupDate(a); // Descending (newest first)
+            } catch (e) {
+                return 0;
+            }
+        });
+
+        // Show top 5 backups
+        console.log('Latest 5 backups:');
+        allBackups.slice(0, 5).forEach((b, i) => console.log(`  ${i + 1}. ${b}`));
+
+        return allBackups;
     } catch (error) {
         if (error.response?.status === 404) {
             console.log('No backups found in GitHub repository');
@@ -93,6 +132,7 @@ async function listGitHubBackups() {
 async function downloadFromGitHub(filePath) {
     const githubToken = process.env.GITHUB_TOKEN;
     const githubRepo = process.env.GITHUB_REPO;
+    const commitRef = process.env.BACKUP_COMMIT_REF || 'main';
 
     const headers = {
         'Authorization': `token ${githubToken}`,
@@ -102,7 +142,7 @@ async function downloadFromGitHub(filePath) {
 
     try {
         const response = await axios.get(
-            `https://api.github.com/repos/${githubRepo}/contents/${filePath}`,
+            `https://api.github.com/repos/${githubRepo}/contents/${filePath}?ref=${commitRef}`,
             { headers }
         );
 
