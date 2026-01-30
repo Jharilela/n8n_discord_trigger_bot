@@ -35,6 +35,9 @@ services:
       - GITHUB_REPO=${GITHUB_REPO:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - BACKUP_COMMIT_REF=${BACKUP_COMMIT_REF:-}
+      - RESTORE_WEBHOOKS_URL=${RESTORE_WEBHOOKS_URL:-}
+      - RESTORE_GUILDS_URL=${RESTORE_GUILDS_URL:-}
+      - RESTORE_ADMINS_URL=${RESTORE_ADMINS_URL:-}
     volumes:
       - backup_data:/app/data
     ports:
