@@ -1,55 +1,17 @@
 #!/usr/bin/env node
 /**
- * Restore database from GitHub backup
- *
- * Set these environment variables:
- *   GITHUB_TOKEN=your_github_token
- *   GITHUB_REPO=username/repo
- *   RESTORE_BACKUP=backup-2026-01-30T03-00-00-378Z  (optional, defaults to latest)
+ * Restore database from local CSV files in /app/data/
  *
  * Usage:
- *   docker-compose exec discord-bot node restore-from-url.js
- *   docker-compose exec discord-bot node restore-from-url.js backup-2026-01-30T03-00-00-378Z
+ *   docker-compose exec discord-bot node restore-local.js
  */
 
 require('dotenv').config();
-const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const { pool, initDatabase } = require('./database');
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-const BACKUP_NAME = process.argv[2] || process.env.RESTORE_BACKUP;
-
-if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    console.error('ERROR: Missing required environment variables');
-    console.error('Set these in your .env file:');
-    console.error('  GITHUB_TOKEN=<token>');
-    console.error('  GITHUB_REPO=<username/repo>');
-    process.exit(1);
-}
-
-const headers = {
-    'Authorization': `token ${GITHUB_TOKEN}`,
-    'Accept': 'application/vnd.github.v3+json',
-    'User-Agent': 'n8n-discord-bot'
-};
-
-async function downloadFile(path) {
-    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
-    const response = await axios.get(url, { headers });
-    return Buffer.from(response.data.content, 'base64').toString('utf8');
-}
-
-async function getLatestBackup() {
-    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/data?per_page=100`;
-    const response = await axios.get(url, { headers });
-    const backups = response.data
-        .filter(item => item.type === 'dir' && item.name.startsWith('backup-'))
-        .map(item => item.name)
-        .sort()
-        .reverse();
-    return backups[0];
-}
+const DATA_DIR = path.join(__dirname, 'data');
 
 function parseCSV(line) {
     const values = [];
@@ -88,18 +50,24 @@ function parseDate(d) {
 async function run() {
     console.log('');
     console.log('='.repeat(50));
-    console.log('FORCE RESTORE FROM GITHUB');
+    console.log('RESTORE FROM LOCAL FILES');
     console.log('='.repeat(50));
+    console.log(`Data directory: ${DATA_DIR}`);
     console.log('');
 
-    // Determine which backup to use
-    let backupName = BACKUP_NAME;
-    if (!backupName) {
-        console.log('Finding latest backup...');
-        backupName = await getLatestBackup();
+    // Check files exist
+    const webhooksFile = path.join(DATA_DIR, 'channel_webhooks.csv');
+    const guildsFile = path.join(DATA_DIR, 'guilds.csv');
+    const adminsFile = path.join(DATA_DIR, 'server_admins.csv');
+
+    if (!fs.existsSync(webhooksFile)) {
+        console.error('ERROR: channel_webhooks.csv not found');
+        process.exit(1);
     }
-    console.log(`Using backup: ${backupName}`);
-    console.log('');
+    if (!fs.existsSync(guildsFile)) {
+        console.error('ERROR: guilds.csv not found');
+        process.exit(1);
+    }
 
     await initDatabase();
     const client = await pool.connect();
@@ -111,37 +79,41 @@ async function run() {
         console.log('Tables cleared.\n');
 
         // Restore server_admins
-        console.log('Downloading server_admins...');
-        const adminsData = await downloadFile(`data/${backupName}/server_admins.csv`);
-        const adminsLines = adminsData.split('\n').filter(l => l.trim());
-        if (adminsLines.length > 1) {
-            const headers = parseCSV(adminsLines[0]);
-            let count = 0;
-            for (let i = 1; i < adminsLines.length; i++) {
-                const vals = parseCSV(adminsLines[i]);
-                const r = {};
-                headers.forEach((h, idx) => r[h] = vals[idx] || null);
-                if (r.user_id) {
-                    await client.query(
-                        'INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
-                        [
-                            r.user_id,
-                            r.username || 'unknown',
-                            r.display_name || null,
-                            parseDate(r.first_seen) || new Date().toISOString(),
-                            parseDate(r.last_seen) || new Date().toISOString(),
-                            parseInt(r.interaction_count) || 1
-                        ]
-                    );
-                    count++;
+        if (fs.existsSync(adminsFile)) {
+            console.log('Restoring server_admins...');
+            const adminsData = fs.readFileSync(adminsFile, 'utf8');
+            const adminsLines = adminsData.split('\n').filter(l => l.trim());
+            if (adminsLines.length > 1) {
+                const headers = parseCSV(adminsLines[0]);
+                let count = 0;
+                for (let i = 1; i < adminsLines.length; i++) {
+                    const vals = parseCSV(adminsLines[i]);
+                    const r = {};
+                    headers.forEach((h, idx) => r[h] = vals[idx] || null);
+                    if (r.user_id) {
+                        await client.query(
+                            'INSERT INTO server_admins (user_id, username, display_name, first_seen, last_seen, interaction_count) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
+                            [
+                                r.user_id,
+                                r.username || 'unknown',
+                                r.display_name || null,
+                                parseDate(r.first_seen) || new Date().toISOString(),
+                                parseDate(r.last_seen) || new Date().toISOString(),
+                                parseInt(r.interaction_count) || 1
+                            ]
+                        );
+                        count++;
+                    }
                 }
+                console.log(`  Restored ${count} admin records`);
             }
-            console.log(`  Restored ${count} admin records`);
+        } else {
+            console.log('server_admins.csv not found, skipping...');
         }
 
         // Restore guilds
-        console.log('Downloading guilds...');
-        const guildsData = await downloadFile(`data/${backupName}/guilds.csv`);
+        console.log('Restoring guilds...');
+        const guildsData = fs.readFileSync(guildsFile, 'utf8');
         const guildsLines = guildsData.split('\n').filter(l => l.trim());
         if (guildsLines.length > 1) {
             const headers = parseCSV(guildsLines[0]);
@@ -168,8 +140,8 @@ async function run() {
         }
 
         // Restore channel_webhooks
-        console.log('Downloading channel_webhooks...');
-        const webhooksData = await downloadFile(`data/${backupName}/channel_webhooks.csv`);
+        console.log('Restoring channel_webhooks...');
+        const webhooksData = fs.readFileSync(webhooksFile, 'utf8');
         const webhooksLines = webhooksData.split('\n').filter(l => l.trim());
         if (webhooksLines.length > 1) {
             const headers = parseCSV(webhooksLines[0]);
