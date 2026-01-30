@@ -1,0 +1,11 @@
+node_modules
+.git
+.env*
+data/
+test-*.js
+check-*.js
+diagnose.js
+*.md
+!PRIVACY_POLICY.md
+Procfile
+railway.json

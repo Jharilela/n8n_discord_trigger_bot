@@ -167,7 +167,7 @@ To list all webhooks in your server:
 
 ## 5. Deploy it yourself
 
-For self-hosting, deployment, and advanced configuration, see the `/deployment/` folder in this repository.
+For self-hosting, deployment, and advanced configuration, see the [deployment](./deployment/) folder in this repository.
 
 ### **Data Backup System**
 

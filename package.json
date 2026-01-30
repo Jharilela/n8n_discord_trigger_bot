@@ -9,7 +9,12 @@
     "backup": "node backup.js",
     "dev": "node index.js"
   },
-  "keywords": ["discord", "bot", "n8n", "webhook"],
+  "keywords": [
+    "discord",
+    "bot",
+    "n8n",
+    "webhook"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -17,7 +22,7 @@
     "axios": "^1.8.4",
     "discord.js": "^14.18.0",
     "dotenv": "^16.5.0",
-    "pg": "^8.11.3",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "pg": "^8.16.3"
   }
 }

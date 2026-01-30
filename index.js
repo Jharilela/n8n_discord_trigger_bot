@@ -31,7 +31,7 @@ const {
     ActionRowBuilder
 } = require('discord.js');
 const axios = require('axios');
-const { initDatabase, db } = require('./database');
+const { initDatabase, db, pool } = require('./database');
 const cron = require('node-cron');
 const http = require('http');
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 // Startup script to handle npm production warnings and provide better error handling
 console.log('🚀 Starting n8n Discord Bot...');
 console.log('Node.js version:', process.version);
